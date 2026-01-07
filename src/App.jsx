@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Trash2, Image as ImageIcon, CheckCircle, Play, Sun, Archive, Target } from 'lucide-react';
+import { Moon, Trash2, Image as ImageIcon, CheckCircle, Play, Sun, Archive, Target, Flame } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function App() {
   const [mode, setMode] = useState('night'); 
-  const [activeTab, setActiveTab] = useState('targets'); // New: 'targets' or 'vault'
+  const [activeTab, setActiveTab] = useState('targets'); 
   const [thoughts, setThoughts] = useState([]);
+  const [streak, setStreak] = useState(0); // NEW: Streak State
   const [currentInput, setCurrentInput] = useState('');
   const [uploading, setUploading] = useState(false);
   
@@ -24,7 +25,59 @@ export default function App() {
       .select('*')
       .order('created_at', { ascending: false });
     
-    if (!error) setThoughts(data || []);
+    if (!error) {
+      setThoughts(data || []);
+      calculateStreak(data || []);
+    }
+  }
+
+  // --- NEW: THE STREAK ALGORITHM ---
+  function calculateStreak(data) {
+    if (!data || data.length === 0) {
+      setStreak(0);
+      return;
+    }
+
+    // 1. Get all unique dates (YYYY-MM-DD) from the database
+    const uniqueDates = [...new Set(data.map(item => new Date(item.created_at).toDateString()))];
+    
+    // 2. Sort dates (newest first)
+    // We need to convert them back to Date objects to sort correctly
+    const sortedDates = uniqueDates.map(d => new Date(d)).sort((a, b) => b - a);
+
+    const today = new Date().toDateString();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayString = yesterday.toDateString();
+
+    let currentStreak = 0;
+    
+    // 3. Check if the streak is alive (must have posted today OR yesterday)
+    // If the newest post is older than yesterday, streak is broken.
+    if (sortedDates[0].toDateString() !== today && sortedDates[0].toDateString() !== yesterdayString) {
+      setStreak(0);
+      return;
+    }
+
+    // 4. Count backwards
+    // We start checking from "Today" (if exists) or "Yesterday"
+    let checkDate = new Date(); // Start with today
+    
+    // If user hasn't posted today yet, we start checking from yesterday to be fair
+    if (sortedDates[0].toDateString() !== today) {
+        checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    for (let i = 0; i < sortedDates.length; i++) {
+        if (sortedDates[i].toDateString() === checkDate.toDateString()) {
+            currentStreak++;
+            checkDate.setDate(checkDate.getDate() - 1); // Move to previous day
+        } else {
+            break; // Gap found, stop counting
+        }
+    }
+
+    setStreak(currentStreak);
   }
 
   const handleImageSelect = (event) => {
@@ -68,7 +121,9 @@ export default function App() {
       .select();
 
     if (data) {
-      setThoughts([data[0], ...thoughts]);
+      const newThoughts = [data[0], ...thoughts];
+      setThoughts(newThoughts);
+      calculateStreak(newThoughts); // Recalculate streak immediately
       setCurrentInput('');
       setImageFile(null);
       setImagePreview(null);
@@ -80,12 +135,13 @@ export default function App() {
   const deleteThought = async (id) => {
     const { error } = await supabase.from('thoughts').delete().eq('id', id);
     if (!error) {
-      setThoughts(thoughts.filter(t => t.id !== id));
+      const newThoughts = thoughts.filter(t => t.id !== id);
+      setThoughts(newThoughts);
+      calculateStreak(newThoughts);
     }
   };
 
   const toggleIgnite = async (id, currentStatus) => {
-    // 1. Explosion only on completion
     if (!currentStatus) {
       confetti({
         particleCount: 150,
@@ -96,7 +152,6 @@ export default function App() {
       });
     }
 
-    // 2. Update Database
     const { error } = await supabase
       .from('thoughts')
       .update({ ignited: !currentStatus })
@@ -109,7 +164,6 @@ export default function App() {
     }
   };
 
-  // Filter the list based on which tab we are on
   const visibleThoughts = thoughts.filter(t => 
     activeTab === 'targets' ? !t.ignited : t.ignited
   );
@@ -182,7 +236,7 @@ export default function App() {
     );
   }
 
-  // MORNING MODE (Target / Vault)
+  // MORNING MODE
   return (
     <div style={morningStyle}>
        <button onClick={() => setMode('night')} style={{ position: 'absolute', top: '16px', right: '16px', border: '1px solid #cbd5e1', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', color: '#64748b', background: 'rgba(255,255,255,0.5)', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
@@ -191,12 +245,21 @@ export default function App() {
 
       <div style={{ maxWidth: '400px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div style={{ marginTop: '40px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-             <Sun size={32} color="#f59e0b" />
-             <h1 style={{ fontSize: '42px', fontWeight: '800', lineHeight: '1', margin: 0, color: '#1e293b' }}>The Fuel.</h1>
+          
+          {/* THE STREAK DISPLAY */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Sun size={32} color="#f59e0b" />
+                <h1 style={{ fontSize: '42px', fontWeight: '800', lineHeight: '1', margin: 0, color: '#1e293b' }}>The Fuel.</h1>
+            </div>
+            
+            {/* FLAME ICON */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#fff7ed', padding: '6px 12px', borderRadius: '20px', border: '1px solid #ffedd5' }}>
+                <Flame size={20} fill={streak > 0 ? "#f97316" : "none"} color="#f97316" />
+                <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#9a3412' }}>{streak} Day{streak !== 1 && 's'}</span>
+            </div>
           </div>
           
-          {/* THE VAULT SWITCHER */}
           <div style={{ display: 'flex', gap: '5px', background: '#f1f5f9', padding: '4px', borderRadius: '12px', width: 'fit-content', marginTop: '10px' }}>
             <button 
               onClick={() => setActiveTab('targets')}
