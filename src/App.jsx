@@ -232,3 +232,15 @@ export default function App() {
                 <button 
                   onClick={() => toggleIgnite(thought.id, thought.ignited)}
                   style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px',
+                    <Play size={16} fill="currentColor" />
+                  Replay Vibe & Ignite
+                </button>
+              )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
