@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Trash2, Image as ImageIcon, CheckCircle, Play, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, StopCircle } from 'lucide-react';
+import { Moon, Trash2, Image as ImageIcon, CheckCircle, Play, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-// --- AUTH COMPONENT ---
 function Auth({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -22,13 +21,8 @@ function Auth({ onLogin }) {
       result = await supabase.auth.signInWithPassword({ email, password });
     }
     const { data, error } = result;
-    if (error) {
-      setMessage(error.message);
-    } else {
-      if (isSignUp && !data.session) {
-        setMessage('Check email for confirmation (if enabled) or sign in.');
-      }
-    }
+    if (error) setMessage(error.message);
+    else if (isSignUp && !data.session) setMessage('Check email for confirmation.');
     setLoading(false);
   };
 
@@ -56,7 +50,6 @@ function Auth({ onLogin }) {
   );
 }
 
-// --- MAIN APP ---
 export default function App() {
   const [session, setSession] = useState(null);
   useEffect(() => {
@@ -68,7 +61,6 @@ export default function App() {
   return <VisionBoard session={session} />;
 }
 
-// --- LOGIC ---
 function VisionBoard({ session }) {
   const [mode, setMode] = useState(() => localStorage.getItem('visionMode') || 'night');
   const [activeTab, setActiveTab] = useState('targets'); 
@@ -77,169 +69,80 @@ function VisionBoard({ session }) {
   const [currentInput, setCurrentInput] = useState('');
   const [uploading, setUploading] = useState(false);
   
-  // MEDIA STATES
-  const [mediaType, setMediaType] = useState('text'); 
-  const [imageFile, setImageFile] = useState(null); 
-  const [imagePreview, setImagePreview] = useState(null);
-  
-  // RECORDING STATES
-  const [isRecording, setIsRecording] = useState(false);
-  const [mediaBlob, setMediaBlob] = useState(null);
-  const [mediaPreviewUrl, setMediaPreviewUrl] = useState(null);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
+  // FILE INPUTS
   const fileInputRef = useRef(null);
-  const videoPreviewRef = useRef(null);
-  const streamRef = useRef(null); 
+  const videoInputRef = useRef(null);
+  const audioInputRef = useRef(null); // NOTE: iOS does not support audio capture nicely, will act as file picker
+  
+  // PREVIEW STATES
+  const [mediaFile, setMediaFile] = useState(null); // Can be image, video, or audio
+  const [mediaType, setMediaType] = useState('text'); // 'text', 'image', 'video', 'audio'
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   useEffect(() => { localStorage.setItem('visionMode', mode); }, [mode]);
   useEffect(() => { fetchThoughts(); }, [session]);
 
-  // --- SAFARI-PROOF RECORDING LOGIC ---
-  const startRecording = async (type) => {
-    try {
-      chunksRef.current = [];
-      
-      // 1. Get the stream
-      const constraints = type === 'video' ? { video: { facingMode: "user" }, audio: true } : { audio: true };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
-      
-      // 2. Setup Preview
-      if (type === 'video' && videoPreviewRef.current) {
-        videoPreviewRef.current.srcObject = stream;
-        videoPreviewRef.current.muted = true; 
-        videoPreviewRef.current.play().catch(e => console.log("Preview play error:", e));
-      }
-
-      // 3. Detect the best format for Safari/Mac vs Chrome
-      let mimeType = '';
-      if (type === 'video') {
-          if (MediaRecorder.isTypeSupported('video/mp4')) {
-              mimeType = 'video/mp4'; // Safari loves this
-          } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
-              mimeType = 'video/webm;codecs=vp9'; // Chrome loves this
-          } else {
-              mimeType = 'video/webm'; // Fallback
-          }
-      } else {
-          if (MediaRecorder.isTypeSupported('audio/mp4')) {
-              mimeType = 'audio/mp4'; // Safari audio
-          } else {
-              mimeType = 'audio/webm'; // Chrome audio
-          }
-      }
-
-      // 4. Start Recorder with specific MimeType
-      const options = mimeType ? { mimeType } : undefined;
-      const recorder = new MediaRecorder(stream, options);
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-            chunksRef.current.push(e.data);
-        }
-      };
-
-      recorder.onstop = () => {
-        // Create the final blob
-        const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' });
-        setMediaBlob(blob);
-        setMediaPreviewUrl(URL.createObjectURL(blob));
-        
-        // Stop the camera light
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      // 5. CRITICAL SAFARI FIX: Start with a 1000ms timeslice
-      // This forces Safari to generate data chunks every 1 second
-      recorder.start(1000); 
-      
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Error accessing media devices:", err);
-      alert("Camera Error: " + err.message);
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
-  const resetMedia = () => {
-    setImageFile(null); setImagePreview(null);
-    setMediaBlob(null); setMediaPreviewUrl(null);
-    setMediaType('text');
-    if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  const handleImageSelect = (event) => {
+  const handleFileSelect = (event, type) => {
     const file = event.target.files[0];
-    if (file) { 
-      setImageFile(file); 
-      setImagePreview(URL.createObjectURL(file)); 
-      setMediaType('photo');
+    if (file) {
+      setMediaFile(file);
+      setMediaType(type);
+      setPreviewUrl(URL.createObjectURL(file));
     }
+  };
+
+  const clearMedia = () => {
+    setMediaFile(null);
+    setMediaType('text');
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (videoInputRef.current) videoInputRef.current.value = '';
+    if (audioInputRef.current) audioInputRef.current.value = '';
   };
 
   const handleCapture = async () => {
-    if (!currentInput.trim() && !imageFile && !mediaBlob) return;
+    if (!currentInput.trim() && !mediaFile) return;
     setUploading(true);
 
     let imageUrl = null;
-    let audioUrl = null;
     let videoUrl = null;
+    let audioUrl = null;
     const timestamp = Date.now();
 
-    if (imageFile) {
-      const fileName = `img-${timestamp}-${imageFile.name}`;
-      const { data } = await supabase.storage.from('images').upload(fileName, imageFile);
-      if (data) imageUrl = supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl;
-    }
-
-    if (mediaBlob) {
-        // Decide extension
-        const isMp4 = mediaBlob.type.includes('mp4');
-        const ext = isMp4 ? 'mp4' : 'webm';
+    if (mediaFile) {
+        // Upload logic
+        const ext = mediaFile.name.split('.').pop();
         const fileName = `${mediaType}-${timestamp}.${ext}`;
-        
-        // Try upload
-        const { data, error } = await supabase.storage.from('images').upload(fileName, mediaBlob);
+        const { data, error } = await supabase.storage.from('images').upload(fileName, mediaFile);
         
         if (error) {
-            alert("Upload Error: " + error.message);
-            console.error(error);
+            alert("Upload failed: " + error.message);
             setUploading(false);
             return;
         }
 
         if (data) {
             const publicUrl = supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl;
+            if (mediaType === 'image') imageUrl = publicUrl;
             if (mediaType === 'video') videoUrl = publicUrl;
-            else audioUrl = publicUrl;
+            if (mediaType === 'audio') audioUrl = publicUrl;
         }
     }
 
     const { data } = await supabase.from('thoughts').insert([{ 
         text: currentInput, 
         image_url: imageUrl, 
-        audio_url: audioUrl,
         video_url: videoUrl,
+        audio_url: audioUrl,
         ignited: false, 
         user_id: session.user.id 
     }]).select();
 
     if (data) {
-      const newThoughts = [data[0], ...thoughts];
-      setThoughts(newThoughts);
-      calculateStreak(newThoughts);
+      setThoughts([data[0], ...thoughts]);
+      calculateStreak([data[0], ...thoughts]);
       setCurrentInput('');
-      resetMedia();
+      clearMedia();
     }
     setUploading(false);
   };
@@ -314,83 +217,51 @@ function VisionBoard({ session }) {
           )}
         </div>
 
-        {/* --- INPUT AREA (ONLY SHOW IN NIGHT MODE) --- */}
+        {/* INPUT AREA (Night Mode Only) */}
         {mode === 'night' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
              
-             {imagePreview && (
-                <div style={{ position: 'relative', width: '100%', height: '220px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #333' }}>
-                  <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <button onClick={resetMedia} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer' }}><X size={18} /></button>
+             {/* PREVIEW */}
+             {mediaFile && (
+                <div style={{ position: 'relative', width: '100%', maxHeight: '300px', background: 'black', borderRadius: '16px', overflow: 'hidden', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {mediaType === 'image' && <img src={previewUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                  {mediaType === 'video' && <video src={previewUrl} controls style={{ width: '100%', maxHeight: '300px' }} />}
+                  {mediaType === 'audio' && <audio src={previewUrl} controls style={{ width: '90%' }} />}
+                  <button onClick={clearMedia} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', zIndex: 10 }}>X</button>
                 </div>
              )}
+
+             <textarea value={currentInput} onChange={(e) => setCurrentInput(e.target.value)} placeholder="What are you building?" style={{ width: '100%', height: '80px', backgroundColor: 'rgba(26, 26, 26, 0.8)', border: '1px solid #333', color: 'white', outline: 'none', borderRadius: '16px', padding: '16px', fontSize: '18px', resize: 'none', backdropFilter: 'blur(10px)' }} disabled={uploading} />
              
-             {mediaType === 'video' && (
-               <div style={{ position: 'relative', width: '100%', height: '260px', background: 'black', borderRadius: '16px', overflow: 'hidden', border: '1px solid #333' }}>
-                  {!mediaPreviewUrl ? (
-                     <video ref={videoPreviewRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                     <video src={mediaPreviewUrl} controls playsInline style={{ width: '100%', height: '100%' }} />
-                  )}
-                  {isRecording && <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'red', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', animation: 'pulse 1s infinite' }}>REC</div>}
-                  {mediaPreviewUrl && <button onClick={resetMedia} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer' }}><X size={18} /></button>}
-               </div>
-             )}
+             {/* HIDDEN INPUTS */}
+             <input type="file" accept="image/*" ref={fileInputRef} onChange={(e) => handleFileSelect(e, 'image')} style={{ display: 'none' }} />
+             <input type="file" accept="video/*" capture="environment" ref={videoInputRef} onChange={(e) => handleFileSelect(e, 'video')} style={{ display: 'none' }} />
+             <input type="file" accept="audio/*" ref={audioInputRef} onChange={(e) => handleFileSelect(e, 'audio')} style={{ display: 'none' }} />
 
-             {mediaType === 'audio' && (
-               <div style={{ width: '100%', padding: '20px', background: '#111', borderRadius: '16px', border: '1px solid #333', textAlign: 'center', color: 'white' }}>
-                  {isRecording ? <p style={{ color: '#ef4444', fontWeight: 'bold', animation: 'pulse 1s infinite' }}>Recording Audio...</p> : mediaPreviewUrl ? <audio src={mediaPreviewUrl} controls style={{ width: '100%' }} /> : <p>Ready to Record</p>}
-                  {mediaPreviewUrl && <button onClick={resetMedia} style={{ marginTop: '10px', background: 'none', border: '1px solid #333', color: '#888', padding: '5px 10px', borderRadius: '8px', cursor: 'pointer' }}>Discard Audio</button>}
-               </div>
-             )}
-
-             {mediaType !== 'video' && (
-              <textarea value={currentInput} onChange={(e) => setCurrentInput(e.target.value)} placeholder={mediaType === 'audio' ? "Add a title to this voice note..." : "What are you building?"} style={{ width: '100%', height: '80px', backgroundColor: 'rgba(26, 26, 26, 0.8)', border: '1px solid #333', color: 'white', outline: 'none', borderRadius: '16px', padding: '16px', fontSize: '18px', resize: 'none', backdropFilter: 'blur(10px)' }} disabled={uploading} />
-             )}
-
-             <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageSelect} style={{ display: 'none' }} />
-
-             <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between' }}>
-               <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={() => { setMediaType('photo'); fileInputRef.current.click(); }} disabled={uploading} style={{ background: mediaType === 'photo' ? '#222' : 'transparent', border: '1px solid #333', borderRadius: '12px', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#c084fc' }}><Camera size={20} /></button>
-                  <button onClick={() => { setMediaType('video'); setMediaBlob(null); setMediaPreviewUrl(null); }} disabled={uploading} style={{ background: mediaType === 'video' ? '#222' : 'transparent', border: '1px solid #333', borderRadius: '12px', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#3b82f6' }}><Video size={20} /></button>
-                  <button onClick={() => { setMediaType('audio'); setMediaBlob(null); setMediaPreviewUrl(null); }} disabled={uploading} style={{ background: mediaType === 'audio' ? '#222' : 'transparent', border: '1px solid #333', borderRadius: '12px', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444' }}><Mic size={20} /></button>
-               </div>
-               {(mediaType === 'video' || mediaType === 'audio') && !mediaBlob ? (
-                  <button 
-                    onClick={() => isRecording ? stopRecording() : startRecording(mediaType)}
-                    style={{ flex: 1, backgroundColor: isRecording ? '#ef4444' : 'white', color: isRecording ? 'white' : 'black', fontWeight: 'bold', border: 'none', borderRadius: '16px', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                  >
-                    {isRecording ? <><StopCircle /> Stop Recording</> : (mediaType === 'video' ? 'Start Video' : 'Start Audio')}
-                  </button>
-               ) : (
-                  <button 
-                    onClick={handleCapture}
-                    disabled={uploading}
-                    style={{ flex: 1, backgroundColor: uploading ? '#333' : '#c084fc', color: 'white', fontWeight: 'bold', border: 'none', borderRadius: '16px', cursor: 'pointer', fontSize: '16px', boxShadow: '0 0 15px rgba(192, 132, 252, 0.3)' }}
-                  >
-                    {uploading ? 'Syncing...' : 'Capture'}
-                  </button>
-               )}
+             {/* BUTTON BAR */}
+             <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => fileInputRef.current.click()} disabled={uploading} style={{ flex: 1, height: '50px', background: '#222', border: '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: '#c084fc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={20} /></button>
+                <button onClick={() => videoInputRef.current.click()} disabled={uploading} style={{ flex: 1, height: '50px', background: '#222', border: '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Video size={20} /></button>
+                <button onClick={() => audioInputRef.current.click()} disabled={uploading} style={{ flex: 1, height: '50px', background: '#222', border: '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Mic size={20} /></button>
              </div>
+
+             <button onClick={handleCapture} disabled={uploading} style={{ width: '100%', padding: '16px', backgroundColor: uploading ? '#333' : '#c084fc', color: 'white', fontWeight: 'bold', border: 'none', borderRadius: '16px', cursor: 'pointer', fontSize: '16px', boxShadow: '0 0 15px rgba(192, 132, 252, 0.3)' }}>{uploading ? 'Syncing...' : 'Capture'}</button>
           </div>
         )}
 
         {/* FEED */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '40px' }}>
-          {visibleThoughts.length === 0 && (<div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}><p style={{ margin: 0, fontSize: '16px' }}>{activeTab === 'targets' ? "Ready to capture." : "The Vault is empty."}</p></div>)}
           {visibleThoughts.map((thought) => (
             <div key={thought.id} style={{ backgroundColor: thought.ignited ? 'rgba(240, 253, 244, 0.9)' : 'rgba(255, 255, 255, 0.8)', border: `1px solid ${thought.ignited ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: '20px', overflow: 'hidden', paddingBottom: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', backdropFilter: 'blur(8px)' }}>
-              {thought.image_url && (<div style={{ width: '100%', height: '260px' }}><img src={thought.image_url} alt="Vision" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>)}
-              {thought.video_url && (<div style={{ width: '100%', background: 'black' }}><video src={thought.video_url} controls playsInline style={{ width: '100%', maxHeight: '400px' }} /></div>)}
-              {thought.audio_url && (<div style={{ padding: '15px 20px 0 20px' }}><audio src={thought.audio_url} controls style={{ width: '100%' }} /></div>)}
+              {thought.image_url && (<img src={thought.image_url} style={{ width: '100%', maxHeight: '300px', objectFit: 'cover' }} />)}
+              {thought.video_url && (<video src={thought.video_url} controls style={{ width: '100%', maxHeight: '400px', background: 'black' }} />)}
+              {thought.audio_url && (<div style={{ padding: '15px' }}><audio src={thought.audio_url} controls style={{ width: '100%' }} /></div>)}
               <div style={{ padding: '0 24px', marginTop: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                    <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600', letterSpacing: '0.5px' }}>{new Date(thought.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}).toUpperCase()}</span>
-                    <button onClick={() => deleteThought(thought.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', opacity: 0.6, padding: 0 }}><Trash2 size={18} /></button>
-                </div>
-                {thought.text && <p style={{ fontSize: '19px', fontWeight: '600', lineHeight: '1.5', margin: 0, color: thought.ignited ? '#94a3b8' : '#1e293b', textDecoration: thought.ignited ? 'line-through' : 'none' }}>"{thought.text}"</p>}
-                {!thought.ignited ? (<button onClick={() => toggleIgnite(thought.id, thought.ignited)} style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: '700', color: '#2563eb', background: 'rgba(59, 130, 246, 0.1)', border: 'none', borderRadius: '8px', padding: '12px', cursor: 'pointer', width: '100%', justifyContent: 'center', transition: 'all 0.2s' }}><Play size={16} fill="currentColor" /> IGNITE VISION</button>) : (<div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '6px', color: '#16a34a', fontWeight: 'bold', fontSize: '14px', justifyContent: 'center' }}><CheckCircle size={18} /> Vision Secured <button onClick={() => toggleIgnite(thought.id, thought.ignited)} style={{ marginLeft: '10px', background: 'none', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}>(Restore)</button></div>)}
+                 <p style={{ fontSize: '19px', fontWeight: '600', color: thought.ignited ? '#94a3b8' : '#1e293b', textDecoration: thought.ignited ? 'line-through' : 'none' }}>"{thought.text}"</p>
+                 <button onClick={() => toggleIgnite(thought.id, thought.ignited)} style={{ marginTop: '20px', width: '100%', padding: '12px', background: thought.ignited ? 'transparent' : 'rgba(59, 130, 246, 0.1)', color: thought.ignited ? '#16a34a' : '#2563eb', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+                   {thought.ignited ? 'Vision Secured' : 'IGNITE VISION'}
+                 </button>
+                 <div style={{ marginTop: '10px', textAlign: 'right' }}><button onClick={() => deleteThought(thought.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={16} /></button></div>
               </div>
             </div>
           ))}
