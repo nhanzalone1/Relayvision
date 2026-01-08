@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import { Moon, Trash2, Image as ImageIcon, CheckCircle, Play, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
+// --- AUTH COMPONENT ---
 function Auth({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -50,6 +51,7 @@ function Auth({ onLogin }) {
   );
 }
 
+// --- MAIN APP ---
 export default function App() {
   const [session, setSession] = useState(null);
   useEffect(() => {
@@ -68,7 +70,6 @@ function VisionBoard({ session }) {
   const [streak, setStreak] = useState(0); 
   const [currentInput, setCurrentInput] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [debugLog, setDebugLog] = useState(''); // NEW DEBUG STATE
   
   // NATIVE INPUT REFS
   const fileInputRef = useRef(null);
@@ -91,10 +92,8 @@ function VisionBoard({ session }) {
   const handleFileSelect = (event, type) => {
     const file = event.target.files[0];
     if (file) {
-      setDebugLog('');
-      // 50MB Check
       if (file.size > 50 * 1024 * 1024) {
-        setDebugLog("Error: File is too large! (Limit 50MB). Please record a shorter clip.");
+        alert("File too large! Keep videos under 50MB.");
         return;
       }
       setMediaFile(file);
@@ -106,16 +105,10 @@ function VisionBoard({ session }) {
 
   const startAudioRecording = async () => {
     try {
-      setDebugLog('');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      // Safari support check
       let options = {};
-      if (MediaRecorder.isTypeSupported('audio/mp4')) {
-        options = { mimeType: 'audio/mp4' };
-      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-        options = { mimeType: 'audio/webm' };
-      }
+      if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' };
+      else if (MediaRecorder.isTypeSupported('audio/webm')) options = { mimeType: 'audio/webm' };
 
       const recorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = recorder;
@@ -138,7 +131,7 @@ function VisionBoard({ session }) {
       recorder.start();
       setIsRecordingAudio(true);
     } catch (err) {
-      setDebugLog("Mic Error: " + err.message);
+      alert("Microphone access denied.");
     }
   };
 
@@ -154,7 +147,6 @@ function VisionBoard({ session }) {
     setAudioBlob(null);
     setMediaType('text');
     setPreviewUrl(null);
-    setDebugLog('');
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (videoInputRef.current) videoInputRef.current.value = '';
   };
@@ -162,7 +154,6 @@ function VisionBoard({ session }) {
   const handleCapture = async () => {
     if (!currentInput.trim() && !mediaFile && !audioBlob) return;
     setUploading(true);
-    setDebugLog('Starting upload...');
 
     let imageUrl = null;
     let videoUrl = null;
@@ -170,16 +161,11 @@ function VisionBoard({ session }) {
     const timestamp = Date.now();
 
     try {
-      // UPLOAD PHOTO OR VIDEO
       if (mediaFile) {
           const ext = mediaFile.name.split('.').pop() || 'mov';
           const fileName = `${mediaType}-${timestamp}.${ext}`;
-          
-          setDebugLog(`Uploading ${mediaType}...`);
           const { data, error } = await supabase.storage.from('images').upload(fileName, mediaFile);
-          
           if (error) throw error;
-
           if (data) {
               const publicUrl = supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl;
               if (mediaType === 'image') imageUrl = publicUrl;
@@ -187,23 +173,16 @@ function VisionBoard({ session }) {
           }
       }
 
-      // UPLOAD AUDIO BLOB
       if (audioBlob) {
-          // Determine extension from type
           const ext = audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
           const fileName = `audio-${timestamp}.${ext}`;
-          
-          setDebugLog('Uploading audio...');
           const { data, error } = await supabase.storage.from('images').upload(fileName, audioBlob);
-          
           if (error) throw error;
-          
           if (data) {
               audioUrl = supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl;
           }
       }
 
-      setDebugLog('Saving to database...');
       const { data, error } = await supabase.from('thoughts').insert([{ 
           text: currentInput, 
           image_url: imageUrl, 
@@ -220,12 +199,10 @@ function VisionBoard({ session }) {
         calculateStreak([data[0], ...thoughts]);
         setCurrentInput('');
         clearMedia();
-        setDebugLog('Success!');
-        setTimeout(() => setDebugLog(''), 3000);
       }
     } catch (err) {
       console.error(err);
-      setDebugLog("FAILED: " + err.message);
+      alert("Error: " + err.message);
     } finally {
       setUploading(false);
     }
@@ -305,13 +282,6 @@ function VisionBoard({ session }) {
         {mode === 'night' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
              
-             {/* DEBUG LOG BOX */}
-             {debugLog && (
-                <div style={{ background: '#7f1d1d', color: '#fecaca', padding: '10px', borderRadius: '8px', fontSize: '12px', textAlign: 'center', border: '1px solid #ef4444' }}>
-                    {debugLog}
-                </div>
-             )}
-
              {/* PREVIEW */}
              {(previewUrl || isRecordingAudio) && (
                 <div style={{ position: 'relative', width: '100%', minHeight: '120px', background: '#111', borderRadius: '16px', overflow: 'hidden', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -339,8 +309,6 @@ function VisionBoard({ session }) {
              <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={() => fileInputRef.current.click()} disabled={uploading || isRecordingAudio} style={{ flex: 1, height: '50px', background: '#222', border: '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: '#c084fc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={20} /></button>
                 <button onClick={() => videoInputRef.current.click()} disabled={uploading || isRecordingAudio} style={{ flex: 1, height: '50px', background: '#222', border: '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Video size={20} /></button>
-                
-                {/* DYNAMIC AUDIO BUTTON */}
                 <button onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording} disabled={uploading} style={{ flex: 1, height: '50px', background: isRecordingAudio ? '#ef4444' : '#222', border: isRecordingAudio ? 'none' : '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: isRecordingAudio ? 'white' : '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {isRecordingAudio ? <Square size={20} fill="currentColor" /> : <Mic size={20} />}
                 </button>
