@@ -70,6 +70,7 @@ function VisionBoard({ session }) {
   const [streak, setStreak] = useState(0); 
   const [currentInput, setCurrentInput] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [debugLog, setDebugLog] = useState('');
   
   // NATIVE INPUT REFS
   const fileInputRef = useRef(null);
@@ -93,13 +94,14 @@ function VisionBoard({ session }) {
     const file = event.target.files[0];
     if (file) {
       if (file.size > 50 * 1024 * 1024) {
-        alert("File too large! Keep videos under 50MB.");
+        setDebugLog("Error: File too large (Max 50MB).");
         return;
       }
       setMediaFile(file);
       setAudioBlob(null);
       setMediaType(type);
       setPreviewUrl(URL.createObjectURL(file));
+      setDebugLog('');
     }
   };
 
@@ -130,6 +132,7 @@ function VisionBoard({ session }) {
 
       recorder.start();
       setIsRecordingAudio(true);
+      setDebugLog('Recording Audio...');
     } catch (err) {
       alert("Microphone access denied.");
     }
@@ -139,6 +142,7 @@ function VisionBoard({ session }) {
     if (mediaRecorderRef.current && isRecordingAudio) {
       mediaRecorderRef.current.stop();
       setIsRecordingAudio(false);
+      setDebugLog('');
     }
   };
 
@@ -154,6 +158,7 @@ function VisionBoard({ session }) {
   const handleCapture = async () => {
     if (!currentInput.trim() && !mediaFile && !audioBlob) return;
     setUploading(true);
+    setDebugLog('Securing Vision...');
 
     let imageUrl = null;
     let videoUrl = null;
@@ -199,10 +204,12 @@ function VisionBoard({ session }) {
         calculateStreak([data[0], ...thoughts]);
         setCurrentInput('');
         clearMedia();
+        setDebugLog('Vision Secured.');
+        setTimeout(() => setDebugLog(''), 2000);
       }
     } catch (err) {
       console.error(err);
-      alert("Error: " + err.message);
+      setDebugLog("Error: " + err.message);
     } finally {
       setUploading(false);
     }
@@ -282,6 +289,13 @@ function VisionBoard({ session }) {
         {mode === 'night' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
              
+             {/* STATUS/ERROR LOG */}
+             {debugLog && (
+                <div style={{ background: debugLog.includes('Error') ? '#7f1d1d' : '#064e3b', color: debugLog.includes('Error') ? '#fecaca' : '#a7f3d0', padding: '10px', borderRadius: '8px', fontSize: '12px', textAlign: 'center', border: `1px solid ${debugLog.includes('Error') ? '#ef4444' : '#10b981'}` }}>
+                    {debugLog}
+                </div>
+             )}
+
              {/* PREVIEW */}
              {(previewUrl || isRecordingAudio) && (
                 <div style={{ position: 'relative', width: '100%', minHeight: '120px', background: '#111', borderRadius: '16px', overflow: 'hidden', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -318,23 +332,26 @@ function VisionBoard({ session }) {
           </div>
         )}
 
-        {/* FEED */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '40px' }}>
-          {visibleThoughts.map((thought) => (
-            <div key={thought.id} style={{ backgroundColor: thought.ignited ? 'rgba(240, 253, 244, 0.9)' : 'rgba(255, 255, 255, 0.8)', border: `1px solid ${thought.ignited ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: '20px', overflow: 'hidden', paddingBottom: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', backdropFilter: 'blur(8px)' }}>
-              {thought.image_url && (<img src={thought.image_url} style={{ width: '100%', maxHeight: '300px', objectFit: 'cover' }} />)}
-              {thought.video_url && (<video src={thought.video_url} controls playsInline style={{ width: '100%', maxHeight: '400px', background: 'black' }} />)}
-              {thought.audio_url && (<div style={{ padding: '15px' }}><audio src={thought.audio_url} controls style={{ width: '100%' }} /></div>)}
-              <div style={{ padding: '0 24px', marginTop: '20px' }}>
-                 <p style={{ fontSize: '19px', fontWeight: '600', color: thought.ignited ? '#94a3b8' : '#1e293b', textDecoration: thought.ignited ? 'line-through' : 'none' }}>"{thought.text}"</p>
-                 <button onClick={() => toggleIgnite(thought.id, thought.ignited)} style={{ marginTop: '20px', width: '100%', padding: '12px', background: thought.ignited ? 'transparent' : 'rgba(59, 130, 246, 0.1)', color: thought.ignited ? '#16a34a' : '#2563eb', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
-                   {thought.ignited ? 'Vision Secured' : 'IGNITE VISION'}
-                 </button>
-                 <div style={{ marginTop: '10px', textAlign: 'right' }}><button onClick={() => deleteThought(thought.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={16} /></button></div>
+        {/* FEED - ONLY SHOW IN MORNING */}
+        {mode === 'morning' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '40px' }}>
+            {visibleThoughts.map((thought) => (
+              <div key={thought.id} style={{ backgroundColor: thought.ignited ? 'rgba(240, 253, 244, 0.9)' : 'rgba(255, 255, 255, 0.8)', border: `1px solid ${thought.ignited ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: '20px', overflow: 'hidden', paddingBottom: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', backdropFilter: 'blur(8px)' }}>
+                {thought.image_url && (<img src={thought.image_url} style={{ width: '100%', maxHeight: '300px', objectFit: 'cover' }} />)}
+                {thought.video_url && (<video src={thought.video_url} controls playsInline style={{ width: '100%', maxHeight: '400px', background: 'black' }} />)}
+                {thought.audio_url && (<div style={{ padding: '15px' }}><audio src={thought.audio_url} controls style={{ width: '100%' }} /></div>)}
+                <div style={{ padding: '0 24px', marginTop: '20px' }}>
+                  <p style={{ fontSize: '19px', fontWeight: '600', color: thought.ignited ? '#94a3b8' : '#1e293b', textDecoration: thought.ignited ? 'line-through' : 'none' }}>"{thought.text}"</p>
+                  <button onClick={() => toggleIgnite(thought.id, thought.ignited)} style={{ marginTop: '20px', width: '100%', padding: '12px', background: thought.ignited ? 'transparent' : 'rgba(59, 130, 246, 0.1)', color: thought.ignited ? '#16a34a' : '#2563eb', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+                    {thought.ignited ? 'Vision Secured' : 'IGNITE VISION'}
+                  </button>
+                  <div style={{ marginTop: '10px', textAlign: 'right' }}><button onClick={() => deleteThought(thought.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={16} /></button></div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
+
       </div>
     </div>
   );
