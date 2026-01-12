@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Trash2, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus } from 'lucide-react';
+import { Moon, Trash2, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, CheckCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-// --- AUTH COMPONENT (Unchanged) ---
+// --- AUTH COMPONENT ---
 function Auth({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -65,12 +65,12 @@ export default function App() {
 
 function VisionBoard({ session }) {
   const [mode, setMode] = useState(() => localStorage.getItem('visionMode') || 'night');
-  const [activeTab, setActiveTab] = useState('targets'); 
+  const [activeTab, setActiveTab] = useState('mission'); // Default to Mission in morning
   const [thoughts, setThoughts] = useState([]);
-  const [missions, setMissions] = useState([]); // New Daily Goals State
+  const [missions, setMissions] = useState([]);
   const [streak, setStreak] = useState(0); 
   const [currentInput, setCurrentInput] = useState('');
-  const [missionInput, setMissionInput] = useState(''); // New Mission Input
+  const [missionInput, setMissionInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [debugLog, setDebugLog] = useState('');
   
@@ -86,12 +86,11 @@ function VisionBoard({ session }) {
   const [mediaType, setMediaType] = useState('text'); 
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
-  const [isQuoteMode, setIsQuoteMode] = useState(false); // Toggle for Quotes
+  const [isQuoteMode, setIsQuoteMode] = useState(false);
 
   useEffect(() => { localStorage.setItem('visionMode', mode); }, [mode]);
   useEffect(() => { fetchThoughts(); fetchMissions(); }, [session]);
 
-  // --- DATA FETCHING ---
   async function fetchThoughts() {
     const { data, error } = await supabase.from('thoughts').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false });
     if (!error) { setThoughts(data || []); calculateStreak(data || []); }
@@ -102,7 +101,6 @@ function VisionBoard({ session }) {
     if (!error) setMissions(data || []);
   }
 
-  // --- ACTIONS ---
   const addMission = async () => {
     if (!missionInput.trim()) return;
     const { data, error } = await supabase.from('missions').insert([{ task: missionInput, user_id: session.user.id, completed: false }]).select();
@@ -113,7 +111,6 @@ function VisionBoard({ session }) {
   };
 
   const toggleMission = async (id, status) => {
-    // If completing, confetti!
     if (!status) confetti({ particleCount: 50, spread: 50, origin: { y: 0.7 }, colors: ['#10b981', '#34d399'] });
     const { error } = await supabase.from('missions').update({ completed: !status }).eq('id', id);
     if (!error) {
@@ -126,12 +123,11 @@ function VisionBoard({ session }) {
     if (!error) setMissions(missions.filter(m => m.id !== id));
   };
 
-  // --- MEDIA HANDLERS ---
   const handleFileSelect = (event, type) => {
     const file = event.target.files[0];
     if (file) {
       if (file.size > 50 * 1024 * 1024) { setDebugLog("Error: File too large (Max 50MB)."); return; }
-      setMediaFile(file); setAudioBlob(null); setMediaType(type); setPreviewUrl(URL.createObjectURL(file)); setIsQuoteMode(false);
+      setMediaFile(file); setAudioBlob(null); setMediaType(type); setPreviewUrl(URL.createObjectURL(file)); setIsQuoteMode(false); setDebugLog('');
     }
   };
 
@@ -151,15 +147,13 @@ function VisionBoard({ session }) {
         setAudioBlob(blob); setMediaFile(null); setMediaType('audio'); setPreviewUrl(URL.createObjectURL(blob)); setIsQuoteMode(false);
         stream.getTracks().forEach(track => track.stop());
       };
-      recorder.start(); setIsRecordingAudio(true);
+      recorder.start(); setIsRecordingAudio(true); setDebugLog('Recording Audio...');
     } catch (err) { alert("Microphone access denied."); }
   };
 
-  const stopAudioRecording = () => { if (mediaRecorderRef.current && isRecordingAudio) { mediaRecorderRef.current.stop(); setIsRecordingAudio(false); } };
-
+  const stopAudioRecording = () => { if (mediaRecorderRef.current && isRecordingAudio) { mediaRecorderRef.current.stop(); setIsRecordingAudio(false); setDebugLog(''); } };
   const clearMedia = () => { setMediaFile(null); setAudioBlob(null); setMediaType('text'); setPreviewUrl(null); setIsQuoteMode(false); if (fileInputRef.current) fileInputRef.current.value = ''; if (videoInputRef.current) videoInputRef.current.value = ''; };
 
-  // --- CAPTURE MAIN VISION ---
   const handleCapture = async () => {
     if (!currentInput.trim() && !mediaFile && !audioBlob) return;
     setUploading(true); setDebugLog('Securing Vision...');
@@ -215,7 +209,7 @@ function VisionBoard({ session }) {
   const handleLogout = async () => { await supabase.auth.signOut(); };
 
   // --- HELPERS ---
-  const visibleThoughts = thoughts.filter(t => activeTab === 'targets' ? !t.ignited : t.ignited);
+  const visibleThoughts = thoughts.filter(t => !t.ignited); // Only show un-ignited in "Vision" tab to keep it focused? Or show all? Let's show Targets.
   const randomQuote = thoughts.filter(t => t.is_quote).length > 0 ? thoughts.filter(t => t.is_quote)[Math.floor(Math.random() * thoughts.filter(t => t.is_quote).length)] : null;
   const nightStyle = { background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', color: 'white', minHeight: '100vh', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
   const morningStyle = { background: 'linear-gradient(135deg, #fdfbf7 0%, #e2e8f0 100%)', color: 'black', minHeight: '100vh', padding: '24px', display: 'flex', flexDirection: 'column' };
@@ -237,26 +231,19 @@ function VisionBoard({ session }) {
                <h1 style={{ fontSize: '36px', fontWeight: 'bold', background: 'linear-gradient(to right, #e9d5ff, #c084fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>Vision Log.</h1>
              </>
           ) : (
-             <div style={{ marginBottom: '20px' }}>
+             <div style={{ marginBottom: '10px' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '10px' }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><Sun size={32} color="#f59e0b" /><h1 style={{ fontSize: '42px', fontWeight: '800', lineHeight: '1', margin: 0, color: '#1e293b' }}>The Fuel.</h1></div>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#fff7ed', padding: '6px 12px', borderRadius: '20px', border: '1px solid #ffedd5' }}><Flame size={20} fill={streak > 0 ? "#f97316" : "none"} color="#f97316" /><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#9a3412' }}>{streak} Day{streak !== 1 && 's'}</span></div>
                </div>
-               
-               {/* MORNING QUOTE HEADER */}
-               {randomQuote && (
-                  <div style={{ padding: '16px', background: '#fff', borderRadius: '12px', borderLeft: '4px solid #f59e0b', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', marginBottom: '10px' }}>
-                      <QuoteIcon size={16} color="#f59e0b" style={{ marginBottom: '8px' }} />
-                      <p style={{ margin: 0, fontSize: '16px', fontStyle: 'italic', fontWeight: '600', color: '#475569' }}>"{randomQuote.text}"</p>
-                  </div>
-               )}
              </div>
           )}
           
+          {/* TWO-TAB SYSTEM (Morning Only) */}
           {mode === 'morning' && (
-             <div style={{ display: 'flex', gap: '5px', background: '#f1f5f9', padding: '4px', borderRadius: '12px', width: 'fit-content' }}>
-               <button onClick={() => setActiveTab('targets')} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'targets' ? 'white' : 'transparent', boxShadow: activeTab === 'targets' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', color: activeTab === 'targets' ? '#0f172a' : '#64748b', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Target size={16} /> Targets</button>
-               <button onClick={() => setActiveTab('vault')} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'vault' ? 'white' : 'transparent', boxShadow: activeTab === 'vault' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', color: activeTab === 'vault' ? '#0f172a' : '#64748b', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Archive size={16} /> The Vault</button>
+             <div style={{ display: 'flex', gap: '5px', background: '#f1f5f9', padding: '4px', borderRadius: '12px', width: '100%', marginTop: '10px', marginBottom: '10px' }}>
+               <button onClick={() => setActiveTab('mission')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: activeTab === 'mission' ? 'white' : 'transparent', boxShadow: activeTab === 'mission' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', color: activeTab === 'mission' ? '#0f172a' : '#64748b', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}><ListTodo size={16} /> Mission</button>
+               <button onClick={() => setActiveTab('vision')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: activeTab === 'vision' ? 'white' : 'transparent', boxShadow: activeTab === 'vision' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', color: activeTab === 'vision' ? '#0f172a' : '#64748b', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}><Eye size={16} /> Vision</button>
              </div>
           )}
         </div>
@@ -300,7 +287,6 @@ function VisionBoard({ session }) {
                     <input type="text" value={missionInput} onChange={(e) => setMissionInput(e.target.value)} placeholder="Add a task (e.g., Read 30 pages)" onKeyDown={(e) => e.key === 'Enter' && addMission()} style={{ flex: 1, padding: '12px', borderRadius: '12px', background: '#111', border: '1px solid #333', color: 'white', outline: 'none' }} />
                     <button onClick={addMission} style={{ background: '#333', border: 'none', borderRadius: '12px', width: '40px', color: 'white', cursor: 'pointer' }}><Plus size={20} /></button>
                 </div>
-                {/* PREVIEW OF TOMORROW'S LIST */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {missions.filter(m => !m.completed).map(m => (
                         <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#aaa', padding: '8px' }}>
@@ -314,49 +300,68 @@ function VisionBoard({ session }) {
           </div>
         )}
 
-        {/* --- MORNING MODE: DISPLAY --- */}
+        {/* --- MORNING MODE: TABS --- */}
         {mode === 'morning' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '40px' }}>
             
-            {/* 1. MISSION CONTROL */}
-            {activeTab === 'targets' && (
-                <div style={{ background: 'white', borderRadius: '16px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#1e293b', fontWeight: 'bold' }}>
-                        <ListTodo size={20} /> Today's Mission
-                    </div>
-                    {missions.length === 0 && <p style={{ color: '#94a3b8', fontSize: '14px' }}>No missions set. Prepare tonight.</p>}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {missions.map(m => (
-                            <div key={m.id} onClick={() => toggleMission(m.id, m.completed)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '8px', background: m.completed ? '#f0fdf4' : '#f8fafc', cursor: 'pointer', border: m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0', transition: 'all 0.2s' }}>
-                                <div style={{ minWidth: '20px', height: '20px', borderRadius: '6px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? '#10b981' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    {m.completed && <CheckSquare size={14} color="white" />}
+            {/* TAB 1: MISSION (Daily Goals) */}
+            {activeTab === 'mission' && (
+                <div style={{ animation: 'fadeIn 0.3s' }}>
+                    {/* QUOTE OF THE DAY - Only in Mission Tab */}
+                    {randomQuote && (
+                        <div style={{ padding: '20px', background: 'white', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px', textAlign: 'center' }}>
+                            <QuoteIcon size={24} color="#cbd5e1" style={{ marginBottom: '10px' }} />
+                            <p style={{ margin: 0, fontSize: '18px', fontStyle: 'italic', fontWeight: '600', color: '#334155', lineHeight: '1.5' }}>"{randomQuote.text}"</p>
+                        </div>
+                    )}
+
+                    {/* MISSION LIST */}
+                    <div style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#0f172a', fontWeight: '800', fontSize: '18px' }}>
+                            <ListTodo size={22} color="#3b82f6" /> Mission Log
+                        </div>
+                        {missions.length === 0 && <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No missions set for today.</div>}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {missions.map(m => (
+                                <div key={m.id} onClick={() => toggleMission(m.id, m.completed)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', borderRadius: '12px', background: m.completed ? '#f0fdf4' : '#f8fafc', cursor: 'pointer', border: m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0', transition: 'all 0.2s' }}>
+                                    <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? '#10b981' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        {m.completed && <CheckSquare size={16} color="white" />}
+                                    </div>
+                                    <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? '#86efac' : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span>
                                 </div>
-                                <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? '#86efac' : '#334155', fontWeight: '500' }}>{m.task}</span>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* 2. VISION VAULT */}
-            {visibleThoughts.map((thought) => (
-              <div key={thought.id} style={{ backgroundColor: thought.ignited ? 'rgba(240, 253, 244, 0.9)' : 'rgba(255, 255, 255, 0.8)', border: `1px solid ${thought.ignited ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: '20px', overflow: 'hidden', paddingBottom: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', backdropFilter: 'blur(8px)' }}>
-                {thought.image_url && (<img src={thought.image_url} style={{ width: '100%', maxHeight: '300px', objectFit: 'cover' }} />)}
-                {thought.video_url && (<video src={thought.video_url} controls playsInline style={{ width: '100%', maxHeight: '400px', background: 'black' }} />)}
-                {thought.audio_url && (<div style={{ padding: '15px' }}><audio src={thought.audio_url} controls style={{ width: '100%' }} /></div>)}
-                <div style={{ padding: '0 24px', marginTop: '20px' }}>
-                  <p style={{ fontSize: thought.is_quote ? '24px' : '19px', fontFamily: thought.is_quote ? 'serif' : 'sans-serif', fontStyle: thought.is_quote ? 'italic' : 'normal', fontWeight: '600', color: thought.ignited ? '#94a3b8' : (thought.is_quote ? '#d97706' : '#1e293b'), textDecoration: thought.ignited ? 'line-through' : 'none', borderLeft: thought.is_quote ? '4px solid #f59e0b' : 'none', paddingLeft: thought.is_quote ? '12px' : '0' }}>"{thought.text}"</p>
-                  <button onClick={() => toggleIgnite(thought.id, thought.ignited)} style={{ marginTop: '20px', width: '100%', padding: '12px', background: thought.ignited ? 'transparent' : 'rgba(59, 130, 246, 0.1)', color: thought.ignited ? '#16a34a' : '#2563eb', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    {thought.ignited ? 'Vision Secured' : 'IGNITE VISION'}
-                  </button>
-                  <div style={{ marginTop: '10px', textAlign: 'right' }}><button onClick={() => deleteThought(thought.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={16} /></button></div>
+            {/* TAB 2: VISION (The Feed) */}
+            {activeTab === 'vision' && (
+                <div style={{ animation: 'fadeIn 0.3s' }}>
+                    {visibleThoughts.length === 0 && <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Vision Log is empty. Capture something tonight.</div>}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {visibleThoughts.map((thought) => (
+                        <div key={thought.id} style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '24px', overflow: 'hidden', paddingBottom: '20px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05)' }}>
+                            {thought.image_url && (<img src={thought.image_url} style={{ width: '100%', maxHeight: '400px', objectFit: 'cover' }} />)}
+                            {thought.video_url && (<video src={thought.video_url} controls playsInline style={{ width: '100%', maxHeight: '400px', background: 'black' }} />)}
+                            {thought.audio_url && (<div style={{ padding: '20px 20px 0 20px' }}><audio src={thought.audio_url} controls style={{ width: '100%' }} /></div>)}
+                            <div style={{ padding: '0 24px', marginTop: '20px' }}>
+                            <p style={{ fontSize: thought.is_quote ? '24px' : '20px', fontFamily: thought.is_quote ? 'serif' : 'sans-serif', fontStyle: thought.is_quote ? 'italic' : 'normal', fontWeight: '700', color: thought.is_quote ? '#d97706' : '#1e293b', lineHeight: '1.4', borderLeft: thought.is_quote ? '4px solid #f59e0b' : 'none', paddingLeft: thought.is_quote ? '16px' : '0' }}>"{thought.text}"</p>
+                            <button onClick={() => toggleIgnite(thought.id, thought.ignited)} style={{ marginTop: '24px', width: '100%', padding: '14px', background: 'rgba(59, 130, 246, 0.05)', color: '#2563eb', border: 'none', borderRadius: '12px', fontWeight: '800', letterSpacing: '0.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                <Flame size={18} fill="currentColor" /> IGNITE VISION
+                            </button>
+                            <div style={{ marginTop: '15px', textAlign: 'right' }}><button onClick={() => deleteThought(thought.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', opacity: 0.5 }}><Trash2 size={18} /></button></div>
+                            </div>
+                        </div>
+                        ))}
+                    </div>
                 </div>
-              </div>
-            ))}
+            )}
           </div>
         )}
 
       </div>
+      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
 }
