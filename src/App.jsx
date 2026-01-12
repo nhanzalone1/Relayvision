@@ -68,7 +68,7 @@ function VisionBoard({ session }) {
   const [activeTab, setActiveTab] = useState('mission'); 
   const [thoughts, setThoughts] = useState([]);
   const [missions, setMissions] = useState([]);
-  const [goals, setGoals] = useState([]); // NEW: User Created Goals
+  const [goals, setGoals] = useState([]); 
   const [streak, setStreak] = useState(0); 
   
   // Inputs
@@ -76,15 +76,16 @@ function VisionBoard({ session }) {
   const [missionInput, setMissionInput] = useState('');
   const [newGoalInput, setNewGoalInput] = useState('');
   const [showGoalCreator, setShowGoalCreator] = useState(false);
+  const [recentMissions, setRecentMissions] = useState([]);
   
   // Selection State
-  const [selectedGoalId, setSelectedGoalId] = useState(null); // Which goal are we tagging?
-  const [filterGoalId, setFilterGoalId] = useState('all'); // Morning mode filter
+  const [selectedGoalId, setSelectedGoalId] = useState(null); 
+  const [filterGoalId, setFilterGoalId] = useState('all'); 
 
   const [uploading, setUploading] = useState(false);
   const [debugLog, setDebugLog] = useState('');
   
-  // Color Palette for creating goals
+  // Color Palette
   const goalColors = ['#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#64748b'];
   const [newGoalColor, setNewGoalColor] = useState(goalColors[0]);
 
@@ -116,7 +117,14 @@ function VisionBoard({ session }) {
   }
   async function fetchMissions() {
     const { data } = await supabase.from('missions').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true });
-    if (data) setMissions(data);
+    if (data) {
+        setMissions(data || []);
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        const recent = data.filter(m => new Date(m.created_at) > threeDaysAgo);
+        const uniqueRecents = [...new Map(recent.map(item => [item['task'], item])).values()];
+        setRecentMissions(uniqueRecents);
+    }
   }
 
   // GOAL LOGIC
@@ -127,7 +135,7 @@ function VisionBoard({ session }) {
         setGoals([...goals, data[0]]);
         setNewGoalInput('');
         setShowGoalCreator(false);
-        setSelectedGoalId(data[0].id); // Auto select new goal
+        setSelectedGoalId(data[0].id);
     }
   };
 
@@ -140,10 +148,9 @@ function VisionBoard({ session }) {
   };
 
   // MISSION LOGIC
-  const addMission = async () => {
-    if (!missionInput.trim()) return;
-    // Use selected goal ID, or null if none selected
-    const { data, error } = await supabase.from('missions').insert([{ task: missionInput, user_id: session.user.id, completed: false, goal_id: selectedGoalId }]).select();
+  const addMission = async (taskText = missionInput, goalId = selectedGoalId) => {
+    if (!taskText.trim()) return;
+    const { data, error } = await supabase.from('missions').insert([{ task: taskText, user_id: session.user.id, completed: false, goal_id: goalId }]).select();
     if (!error && data) {
       setMissions([...missions, data[0]]);
       setMissionInput('');
@@ -151,10 +158,8 @@ function VisionBoard({ session }) {
   };
 
   const toggleMission = async (id, status, goalId) => {
-    // Find goal color for confetti
     const goal = goals.find(g => g.id === goalId);
     const color = goal ? goal.color : '#cbd5e1';
-    
     if (!status) confetti({ particleCount: 50, spread: 50, origin: { y: 0.7 }, colors: [color] });
     const { error } = await supabase.from('missions').update({ completed: !status }).eq('id', id);
     if (!error) {
@@ -369,6 +374,18 @@ function VisionBoard({ session }) {
              {/* 2. TOMORROW'S MISSION */}
              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <h3 style={{ fontSize: '14px', color: '#666', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Tomorrow's Mission</h3>
+                
+                {/* QUICK ADD RECENT */}
+                {recentMissions.length > 0 && (
+                    <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
+                        {recentMissions.map(m => (
+                            <button key={'recent-'+m.id} onClick={() => addMission(m.task, m.goal_id)} style={{ whiteSpace: 'nowrap', background: '#222', border: '1px solid #333', color: '#888', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <RotateCcw size={10} /> {m.task}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <input type="text" value={missionInput} onChange={(e) => setMissionInput(e.target.value)} placeholder="Add a task" onKeyDown={(e) => e.key === 'Enter' && addMission()} style={{ flex: 1, padding: '12px', borderRadius: '12px', background: '#111', border: '1px solid #333', borderLeft: `4px solid ${getGoalColor(selectedGoalId)}`, color: 'white', outline: 'none' }} />
                     <button onClick={() => addMission()} style={{ background: '#333', border: 'none', borderRadius: '12px', width: '40px', color: 'white', cursor: 'pointer' }}><Plus size={20} /></button>
@@ -407,10 +424,15 @@ function VisionBoard({ session }) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {missions.map(m => (
                                 <div key={m.id} onClick={() => toggleMission(m.id, m.completed, m.goal_id)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', borderRadius: '12px', background: m.completed ? '#f0fdf4' : '#f8fafc', cursor: 'pointer', borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0', borderLeftWidth: '4px', transition: 'all 0.2s' }}>
-                                    <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? getGoalColor(m.goal_id) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {m.completed && <CheckSquare size={16} color="white" />}
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                                        <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? getGoalColor(m.goal_id) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {m.completed && <CheckSquare size={16} color="white" />}
+                                        </div>
                                     </div>
-                                    <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? '#86efac' : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)}</span>
+                                        <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? '#86efac' : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span>
+                                    </div>
                                 </div>
                             ))}
                         </div>
