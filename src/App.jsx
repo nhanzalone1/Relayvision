@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Trash2, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, CheckCircle, RotateCcw } from 'lucide-react';
+import { Moon, Trash2, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, CheckCircle, RotateCcw, Layout, FolderPlus } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 // --- AUTH COMPONENT ---
@@ -68,22 +68,25 @@ function VisionBoard({ session }) {
   const [activeTab, setActiveTab] = useState('mission'); 
   const [thoughts, setThoughts] = useState([]);
   const [missions, setMissions] = useState([]);
-  const [recentMissions, setRecentMissions] = useState([]); // For "Quick Add" history
+  const [goals, setGoals] = useState([]); // NEW: User Created Goals
   const [streak, setStreak] = useState(0); 
+  
+  // Inputs
   const [currentInput, setCurrentInput] = useState('');
   const [missionInput, setMissionInput] = useState('');
+  const [newGoalInput, setNewGoalInput] = useState('');
+  const [showGoalCreator, setShowGoalCreator] = useState(false);
+  
+  // Selection State
+  const [selectedGoalId, setSelectedGoalId] = useState(null); // Which goal are we tagging?
+  const [filterGoalId, setFilterGoalId] = useState('all'); // Morning mode filter
+
   const [uploading, setUploading] = useState(false);
   const [debugLog, setDebugLog] = useState('');
   
-  // COLOR TAGS SYSTEM
-  const colors = [
-    { id: '#ef4444', name: 'Physical' }, // Red
-    { id: '#10b981', name: 'Finance' },  // Green
-    { id: '#3b82f6', name: 'Intellect' },// Blue
-    { id: '#a855f7', name: 'Spirit' },   // Purple
-    { id: '#94a3b8', name: 'General' }   // Slate
-  ];
-  const [selectedColor, setSelectedColor] = useState(colors[4].id); // Default Slate
+  // Color Palette for creating goals
+  const goalColors = ['#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#64748b'];
+  const [newGoalColor, setNewGoalColor] = useState(goalColors[0]);
 
   // Refs
   const fileInputRef = useRef(null);
@@ -100,39 +103,59 @@ function VisionBoard({ session }) {
   const [isQuoteMode, setIsQuoteMode] = useState(false);
 
   useEffect(() => { localStorage.setItem('visionMode', mode); }, [mode]);
-  useEffect(() => { fetchThoughts(); fetchMissions(); }, [session]);
+  useEffect(() => { fetchThoughts(); fetchMissions(); fetchGoals(); }, [session]);
 
   // FETCHING
+  async function fetchGoals() {
+    const { data } = await supabase.from('goals').select('*').eq('user_id', session.user.id);
+    if (data) setGoals(data);
+  }
   async function fetchThoughts() {
-    const { data, error } = await supabase.from('thoughts').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false });
-    if (!error) { setThoughts(data || []); calculateStreak(data || []); }
+    const { data } = await supabase.from('thoughts').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false });
+    if (data) { setThoughts(data); calculateStreak(data); }
+  }
+  async function fetchMissions() {
+    const { data } = await supabase.from('missions').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true });
+    if (data) setMissions(data);
   }
 
-  async function fetchMissions() {
-    const { data, error } = await supabase.from('missions').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true });
-    if (!error) {
-        setMissions(data || []);
-        // Calculate Recents (Last 3 Days, Unique Tasks)
-        const threeDaysAgo = new Date();
-        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-        const recent = data.filter(m => new Date(m.created_at) > threeDaysAgo);
-        const uniqueRecents = [...new Map(recent.map(item => [item['task'], item])).values()];
-        setRecentMissions(uniqueRecents);
+  // GOAL LOGIC
+  const createGoal = async () => {
+    if (!newGoalInput.trim()) return;
+    const { data, error } = await supabase.from('goals').insert([{ title: newGoalInput, color: newGoalColor, user_id: session.user.id }]).select();
+    if (!error && data) {
+        setGoals([...goals, data[0]]);
+        setNewGoalInput('');
+        setShowGoalCreator(false);
+        setSelectedGoalId(data[0].id); // Auto select new goal
     }
-  }
+  };
+
+  const deleteGoal = async (id, e) => {
+    e.stopPropagation();
+    if(!window.confirm("Delete this goal?")) return;
+    await supabase.from('goals').delete().eq('id', id);
+    setGoals(goals.filter(g => g.id !== id));
+    if(selectedGoalId === id) setSelectedGoalId(null);
+  };
 
   // MISSION LOGIC
-  const addMission = async (taskText = missionInput, color = selectedColor) => {
-    if (!taskText.trim()) return;
-    const { data, error } = await supabase.from('missions').insert([{ task: taskText, user_id: session.user.id, completed: false, color_tag: color }]).select();
+  const addMission = async () => {
+    if (!missionInput.trim()) return;
+    // Use selected goal ID, or null if none selected
+    const { data, error } = await supabase.from('missions').insert([{ task: missionInput, user_id: session.user.id, completed: false, goal_id: selectedGoalId }]).select();
     if (!error && data) {
       setMissions([...missions, data[0]]);
       setMissionInput('');
     }
   };
 
-  const toggleMission = async (id, status, color) => {
-    if (!status) confetti({ particleCount: 50, spread: 50, origin: { y: 0.7 }, colors: [color || '#10b981'] });
+  const toggleMission = async (id, status, goalId) => {
+    // Find goal color for confetti
+    const goal = goals.find(g => g.id === goalId);
+    const color = goal ? goal.color : '#cbd5e1';
+    
+    if (!status) confetti({ particleCount: 50, spread: 50, origin: { y: 0.7 }, colors: [color] });
     const { error } = await supabase.from('missions').update({ completed: !status }).eq('id', id);
     if (!error) {
       setMissions(missions.map(m => m.id === id ? { ...m, completed: !status } : m));
@@ -202,7 +225,7 @@ function VisionBoard({ session }) {
       }
       const { data, error } = await supabase.from('thoughts').insert([{ 
           text: currentInput, image_url: imageUrl, video_url: videoUrl, audio_url: audioUrl, 
-          is_quote: isQuoteMode, ignited: false, user_id: session.user.id, color_tag: selectedColor 
+          is_quote: isQuoteMode, ignited: false, user_id: session.user.id, goal_id: selectedGoalId 
       }]).select();
       if (error) throw error;
       if (data) {
@@ -231,7 +254,20 @@ function VisionBoard({ session }) {
   const handleLogout = async () => { await supabase.auth.signOut(); };
 
   // --- HELPERS ---
-  const visibleThoughts = thoughts.filter(t => !t.ignited); 
+  const getGoalColor = (id) => {
+      const g = goals.find(g => g.id === id);
+      return g ? g.color : '#94a3b8'; // Default slate
+  }
+  const getGoalTitle = (id) => {
+      const g = goals.find(g => g.id === id);
+      return g ? g.title : 'General';
+  }
+
+  // Filter Morning Feed
+  const visibleThoughts = thoughts
+    .filter(t => !t.ignited)
+    .filter(t => filterGoalId === 'all' ? true : t.goal_id === filterGoalId);
+
   const randomQuote = thoughts.filter(t => t.is_quote).length > 0 ? thoughts.filter(t => t.is_quote)[Math.floor(Math.random() * thoughts.filter(t => t.is_quote).length)] : null;
   const nightStyle = { background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', color: 'white', minHeight: '100vh', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
   const morningStyle = { background: 'linear-gradient(135deg, #fdfbf7 0%, #e2e8f0 100%)', color: 'black', minHeight: '100vh', padding: '24px', display: 'flex', flexDirection: 'column' };
@@ -276,11 +312,32 @@ function VisionBoard({ session }) {
              
              {debugLog && <div style={{ background: debugLog.includes('Error') ? '#7f1d1d' : '#064e3b', color: debugLog.includes('Error') ? '#fecaca' : '#a7f3d0', padding: '10px', borderRadius: '8px', fontSize: '12px', textAlign: 'center', border: `1px solid ${debugLog.includes('Error') ? '#ef4444' : '#10b981'}` }}>{debugLog}</div>}
 
-             {/* 0. COLOR PICKER - APPLIES TO EVERYTHING */}
-             <div style={{ display: 'flex', justifyContent: 'center', gap: '15px' }}>
-                {colors.map(c => (
-                    <button key={c.id} onClick={() => setSelectedColor(c.id)} style={{ width: '24px', height: '24px', borderRadius: '50%', background: c.id, border: selectedColor === c.id ? '2px solid white' : '2px solid transparent', cursor: 'pointer', transition: 'all 0.2s', boxShadow: selectedColor === c.id ? `0 0 10px ${c.id}` : 'none' }} title={c.name} />
-                ))}
+             {/* 0. DYNAMIC GOAL SELECTOR */}
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+                    <button onClick={() => setSelectedGoalId(null)} style={{ padding: '6px 12px', borderRadius: '20px', border: selectedGoalId === null ? '1px solid white' : '1px solid #333', background: selectedGoalId === null ? '#333' : 'transparent', color: 'white', fontSize: '12px', cursor: 'pointer' }}>General</button>
+                    {goals.map(g => (
+                        <div key={g.id} style={{ position: 'relative' }}>
+                            <button onClick={() => setSelectedGoalId(g.id)} style={{ padding: '6px 12px', borderRadius: '20px', border: selectedGoalId === g.id ? '1px solid white' : `1px solid ${g.color}44`, background: selectedGoalId === g.id ? g.color : `${g.color}22`, color: selectedGoalId === g.id ? 'white' : g.color, fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                {g.title}
+                            </button>
+                            <button onClick={(e) => deleteGoal(g.id, e)} style={{ position: 'absolute', top: '-5px', right: '-5px', width: '14px', height: '14px', background: 'red', borderRadius: '50%', border: 'none', color: 'white', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: 0.8 }}>x</button>
+                        </div>
+                    ))}
+                    <button onClick={() => setShowGoalCreator(!showGoalCreator)} style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#222', border: '1px solid #444', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Plus size={14} /></button>
+                 </div>
+                 
+                 {/* GOAL CREATOR DROPDOWN */}
+                 {showGoalCreator && (
+                     <div style={{ background: '#111', padding: '15px', borderRadius: '16px', border: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '5px' }}>
+                         <h4 style={{ margin: 0, fontSize: '12px', color: '#666' }}>NEW GOAL (e.g. "Get Lean")</h4>
+                         <input type="text" value={newGoalInput} onChange={(e) => setNewGoalInput(e.target.value)} placeholder="Goal Title" style={{ background: '#222', border: '1px solid #444', color: 'white', padding: '8px', borderRadius: '8px', outline: 'none' }} />
+                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            {goalColors.map(c => <button key={c} onClick={() => setNewGoalColor(c)} style={{ width: '20px', height: '20px', borderRadius: '50%', background: c, border: newGoalColor === c ? '2px solid white' : 'none', cursor: 'pointer' }} />)}
+                         </div>
+                         <button onClick={createGoal} style={{ background: '#fff', color: 'black', border: 'none', padding: '8px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Create Goal</button>
+                     </div>
+                 )}
              </div>
 
              {/* 1. VISION CAPTURE */}
@@ -295,9 +352,8 @@ function VisionBoard({ session }) {
                       {!isRecordingAudio && <button onClick={clearMedia} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', zIndex: 10 }}>X</button>}
                     </div>
                  )}
-                 <textarea value={currentInput} onChange={(e) => setCurrentInput(e.target.value)} placeholder={isQuoteMode ? "Enter the quote..." : "What inspires you?"} style={{ width: '100%', height: '80px', backgroundColor: 'rgba(26, 26, 26, 0.8)', border: isQuoteMode ? '2px solid #f59e0b' : '1px solid #333', borderLeft: `4px solid ${selectedColor}`, color: isQuoteMode ? '#f59e0b' : 'white', fontStyle: isQuoteMode ? 'italic' : 'normal', outline: 'none', borderRadius: '16px', padding: '16px', fontSize: '18px', resize: 'none', backdropFilter: 'blur(10px)' }} disabled={uploading} />
+                 <textarea value={currentInput} onChange={(e) => setCurrentInput(e.target.value)} placeholder={isQuoteMode ? "Enter the quote..." : "What inspires you?"} style={{ width: '100%', height: '80px', backgroundColor: 'rgba(26, 26, 26, 0.8)', border: isQuoteMode ? '2px solid #f59e0b' : '1px solid #333', borderLeft: `4px solid ${getGoalColor(selectedGoalId)}`, color: isQuoteMode ? '#f59e0b' : 'white', fontStyle: isQuoteMode ? 'italic' : 'normal', outline: 'none', borderRadius: '16px', padding: '16px', fontSize: '18px', resize: 'none', backdropFilter: 'blur(10px)' }} disabled={uploading} />
                  
-                 {/* Hidden Inputs */}
                  <input type="file" accept="image/*" ref={fileInputRef} onChange={(e) => handleFileSelect(e, 'image')} style={{ display: 'none' }} />
                  <input type="file" accept="video/*" capture="environment" ref={videoInputRef} onChange={(e) => handleFileSelect(e, 'video')} style={{ display: 'none' }} />
                  
@@ -313,26 +369,14 @@ function VisionBoard({ session }) {
              {/* 2. TOMORROW'S MISSION */}
              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <h3 style={{ fontSize: '14px', color: '#666', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Tomorrow's Mission</h3>
-                
-                {/* QUICK ADD RECENT */}
-                {recentMissions.length > 0 && (
-                    <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
-                        {recentMissions.map(m => (
-                            <button key={'recent-'+m.id} onClick={() => addMission(m.task, m.color_tag || selectedColor)} style={{ whiteSpace: 'nowrap', background: '#222', border: '1px solid #333', color: '#888', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                <RotateCcw size={10} /> {m.task}
-                            </button>
-                        ))}
-                    </div>
-                )}
-
                 <div style={{ display: 'flex', gap: '10px' }}>
-                    <input type="text" value={missionInput} onChange={(e) => setMissionInput(e.target.value)} placeholder="Add a task (e.g., Read 30 pages)" onKeyDown={(e) => e.key === 'Enter' && addMission()} style={{ flex: 1, padding: '12px', borderRadius: '12px', background: '#111', border: '1px solid #333', borderLeft: `4px solid ${selectedColor}`, color: 'white', outline: 'none' }} />
+                    <input type="text" value={missionInput} onChange={(e) => setMissionInput(e.target.value)} placeholder="Add a task" onKeyDown={(e) => e.key === 'Enter' && addMission()} style={{ flex: 1, padding: '12px', borderRadius: '12px', background: '#111', border: '1px solid #333', borderLeft: `4px solid ${getGoalColor(selectedGoalId)}`, color: 'white', outline: 'none' }} />
                     <button onClick={() => addMission()} style={{ background: '#333', border: 'none', borderRadius: '12px', width: '40px', color: 'white', cursor: 'pointer' }}><Plus size={20} /></button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {missions.filter(m => !m.completed).map(m => (
                         <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#aaa', padding: '8px' }}>
-                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: m.color_tag || '#444' }}></div>
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: getGoalColor(m.goal_id) }}></div>
                             {m.task}
                             <button onClick={() => deleteMission(m.id)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#444', cursor: 'pointer' }}><X size={14} /></button>
                         </div>
@@ -362,8 +406,8 @@ function VisionBoard({ session }) {
                         {missions.length === 0 && <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No missions set for today.</div>}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {missions.map(m => (
-                                <div key={m.id} onClick={() => toggleMission(m.id, m.completed, m.color_tag)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', borderRadius: '12px', background: m.completed ? '#f0fdf4' : '#f8fafc', cursor: 'pointer', borderLeft: `4px solid ${m.color_tag || '#cbd5e1'}`, border: m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0', borderLeftWidth: '4px', transition: 'all 0.2s' }}>
-                                    <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? (m.color_tag || '#10b981') : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div key={m.id} onClick={() => toggleMission(m.id, m.completed, m.goal_id)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', borderRadius: '12px', background: m.completed ? '#f0fdf4' : '#f8fafc', cursor: 'pointer', borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0', borderLeftWidth: '4px', transition: 'all 0.2s' }}>
+                                    <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? getGoalColor(m.goal_id) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         {m.completed && <CheckSquare size={16} color="white" />}
                                     </div>
                                     <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? '#86efac' : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span>
@@ -374,17 +418,26 @@ function VisionBoard({ session }) {
                 </div>
             )}
 
-            {/* TAB 2: VISION */}
+            {/* TAB 2: VISION WITH SUB-TABS */}
             {activeTab === 'vision' && (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
-                    {visibleThoughts.length === 0 && <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Vision Log is empty. Capture something tonight.</div>}
+                    {/* VISION FILTER TABS */}
+                    <div style={{ overflowX: 'auto', display: 'flex', gap: '10px', paddingBottom: '10px', marginBottom: '10px', scrollbarWidth: 'none' }}>
+                        <button onClick={() => setFilterGoalId('all')} style={{ whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: '20px', border: 'none', background: filterGoalId === 'all' ? '#0f172a' : '#fff', color: filterGoalId === 'all' ? '#fff' : '#64748b', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>All</button>
+                        {goals.map(g => (
+                             <button key={g.id} onClick={() => setFilterGoalId(g.id)} style={{ whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: '20px', border: 'none', background: filterGoalId === g.id ? g.color : '#fff', color: filterGoalId === g.id ? '#fff' : '#64748b', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>{g.title}</button>
+                        ))}
+                    </div>
+
+                    {visibleThoughts.length === 0 && <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Vision Log is empty for this goal.</div>}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         {visibleThoughts.map((thought) => (
-                        <div key={thought.id} style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderTop: `4px solid ${thought.color_tag || '#e2e8f0'}`, borderRadius: '24px', overflow: 'hidden', paddingBottom: '20px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05)' }}>
+                        <div key={thought.id} style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderTop: `4px solid ${getGoalColor(thought.goal_id)}`, borderRadius: '24px', overflow: 'hidden', paddingBottom: '20px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05)' }}>
                             {thought.image_url && (<img src={thought.image_url} style={{ width: '100%', maxHeight: '400px', objectFit: 'cover' }} />)}
                             {thought.video_url && (<video src={thought.video_url} controls playsInline style={{ width: '100%', maxHeight: '400px', background: 'black' }} />)}
                             {thought.audio_url && (<div style={{ padding: '20px 20px 0 20px' }}><audio src={thought.audio_url} controls style={{ width: '100%' }} /></div>)}
                             <div style={{ padding: '0 24px', marginTop: '20px' }}>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}><span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(thought.goal_id), background: `${getGoalColor(thought.goal_id)}15`, padding: '4px 8px', borderRadius: '4px' }}>{getGoalTitle(thought.goal_id)}</span></div>
                             <p style={{ fontSize: thought.is_quote ? '24px' : '20px', fontFamily: thought.is_quote ? 'serif' : 'sans-serif', fontStyle: thought.is_quote ? 'italic' : 'normal', fontWeight: '700', color: thought.is_quote ? '#d97706' : '#1e293b', lineHeight: '1.4', borderLeft: thought.is_quote ? '4px solid #f59e0b' : 'none', paddingLeft: thought.is_quote ? '16px' : '0' }}>"{thought.text}"</p>
                             <button onClick={() => toggleIgnite(thought.id, thought.ignited)} style={{ marginTop: '24px', width: '100%', padding: '14px', background: 'rgba(59, 130, 246, 0.05)', color: '#2563eb', border: 'none', borderRadius: '12px', fontWeight: '800', letterSpacing: '0.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                                 <Flame size={18} fill="currentColor" /> IGNITE VISION
