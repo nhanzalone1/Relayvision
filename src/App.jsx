@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Trash2, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy } from 'lucide-react';
+import { Moon, Trash2, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, CheckCircle, RotateCcw, Trophy } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 // --- AUTH COMPONENT ---
@@ -157,31 +157,38 @@ function VisionBoard({ session }) {
     }
   };
 
-  // THE 3-STAGE TOGGLE (Pending -> Done -> Crushed -> Pending)
-  const cycleMissionStatus = async (mission) => {
-    const goal = goals.find(g => g.id === mission.goal_id);
-    const color = goal ? goal.color : '#cbd5e1';
-    
-    let updates = {};
-    
-    // Cycle Logic
-    if (!mission.completed) {
-        // State 1 -> 2: Done
-        updates = { completed: true, crushed: false };
-        confetti({ particleCount: 30, spread: 40, origin: { y: 0.7 }, colors: [color], scalar: 0.8 });
-    } else if (mission.completed && !mission.crushed) {
-        // State 2 -> 3: CRUSHED
-        updates = { completed: true, crushed: true };
-        confetti({ particleCount: 100, spread: 70, origin: { y: 0.7 }, colors: ['#f59e0b', '#fbbf24', '#ffffff'], scalar: 1.2 });
-    } else {
-        // State 3 -> 1: Reset
-        updates = { completed: false, crushed: false, victory_note: '' };
-    }
+  // NEW: SEPARATE HANDLERS
+  const toggleCompleted = async (mission) => {
+      // Toggle logic: If crushed, going back to uncompleted resets crushed too.
+      const newCompleted = !mission.completed;
+      const updates = { completed: newCompleted, crushed: newCompleted ? mission.crushed : false };
+      
+      // Confetti only on completion
+      if (newCompleted && !mission.completed) {
+          const goal = goals.find(g => g.id === mission.goal_id);
+          const color = goal ? goal.color : '#cbd5e1';
+          confetti({ particleCount: 30, spread: 40, origin: { y: 0.7 }, colors: [color], scalar: 0.8 });
+      }
 
-    const { error } = await supabase.from('missions').update(updates).eq('id', mission.id);
-    if (!error) {
-      setMissions(missions.map(m => m.id === mission.id ? { ...m, ...updates } : m));
-    }
+      const { error } = await supabase.from('missions').update(updates).eq('id', mission.id);
+      if (!error) {
+        setMissions(missions.map(m => m.id === mission.id ? { ...m, ...updates } : m));
+      }
+  };
+
+  const toggleCrushed = async (mission) => {
+      // Logic: Toggling crushed ON automatically sets completed ON.
+      const newCrushed = !mission.crushed;
+      const updates = { crushed: newCrushed, completed: newCrushed ? true : mission.completed };
+
+      if (newCrushed) {
+          confetti({ particleCount: 100, spread: 70, origin: { y: 0.7 }, colors: ['#f59e0b', '#fbbf24', '#ffffff'], scalar: 1.2 });
+      }
+
+      const { error } = await supabase.from('missions').update(updates).eq('id', mission.id);
+      if (!error) {
+        setMissions(missions.map(m => m.id === mission.id ? { ...m, ...updates } : m));
+      }
   };
 
   const saveVictoryNote = async (id, note) => {
@@ -438,15 +445,23 @@ function VisionBoard({ session }) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {missions.map(m => (
                                 <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '12px', background: m.crushed ? '#fff7ed' : (m.completed ? '#f0fdf4' : '#f8fafc'), borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: m.crushed ? '1px solid #fdba74' : (m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0'), borderLeftWidth: '4px', transition: 'all 0.2s' }}>
-                                    {/* Main Row */}
-                                    <div onClick={() => cycleMissionStatus(m)} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-                                        <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.crushed ? '#f59e0b' : (m.completed ? getGoalColor(m.goal_id) : 'transparent'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {m.crushed ? <Flame size={16} color="white" fill="white" /> : (m.completed && <CheckSquare size={16} color="white" />)}
+                                    {/* Mission Row - SPLIT INTO TWO CLICK ZONES */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        {/* LEFT ZONE: TOGGLE COMPLETE */}
+                                        <div onClick={() => toggleCompleted(m)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+                                            <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? getGoalColor(m.goal_id) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                {m.completed && <CheckSquare size={16} color="white" />}
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)}</span>
+                                                <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? (m.crushed ? '#d97706' : '#86efac') : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span>
+                                            </div>
                                         </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)}</span>
-                                            <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? (m.crushed ? '#d97706' : '#86efac') : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span>
-                                        </div>
+
+                                        {/* RIGHT ZONE: CRUSH IT BUTTON */}
+                                        <button onClick={() => toggleCrushed(m)} style={{ background: m.crushed ? '#f59e0b' : 'transparent', border: m.crushed ? 'none' : '1px solid #e2e8f0', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                            <Flame size={16} color={m.crushed ? 'white' : '#cbd5e1'} fill={m.crushed ? 'white' : 'transparent'} />
+                                        </button>
                                     </div>
                                     
                                     {/* Victory Note Input (Only if Crushed) */}
@@ -457,7 +472,7 @@ function VisionBoard({ session }) {
                                                 placeholder="How did you crush it?" 
                                                 value={m.victory_note || ''} 
                                                 onChange={(e) => saveVictoryNote(m.id, e.target.value)}
-                                                onClick={(e) => e.stopPropagation()} // Prevent toggling when clicking input
+                                                onClick={(e) => e.stopPropagation()} 
                                                 style={{ width: '100%', padding: '8px', fontSize: '13px', border: '1px solid #fed7aa', borderRadius: '6px', background: '#fff', color: '#c2410c', outline: 'none' }}
                                             />
                                         </div>
@@ -469,7 +484,7 @@ function VisionBoard({ session }) {
                 </div>
             )}
 
-            {/* TAB 2: VISION */}
+            {/* TAB 2: VISION WITH SUB-TABS */}
             {activeTab === 'vision' && (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
                     <div style={{ overflowX: 'auto', display: 'flex', gap: '10px', paddingBottom: '10px', marginBottom: '10px', scrollbarWidth: 'none' }}>
