@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Trash2, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, CheckCircle, RotateCcw, Layout, FolderPlus } from 'lucide-react';
+import { Moon, Trash2, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 // --- AUTH COMPONENT ---
@@ -150,21 +150,45 @@ function VisionBoard({ session }) {
   // MISSION LOGIC
   const addMission = async (taskText = missionInput, goalId = selectedGoalId) => {
     if (!taskText.trim()) return;
-    const { data, error } = await supabase.from('missions').insert([{ task: taskText, user_id: session.user.id, completed: false, goal_id: goalId }]).select();
+    const { data, error } = await supabase.from('missions').insert([{ task: taskText, user_id: session.user.id, completed: false, crushed: false, goal_id: goalId }]).select();
     if (!error && data) {
       setMissions([...missions, data[0]]);
       setMissionInput('');
     }
   };
 
-  const toggleMission = async (id, status, goalId) => {
-    const goal = goals.find(g => g.id === goalId);
+  // THE 3-STAGE TOGGLE (Pending -> Done -> Crushed -> Pending)
+  const cycleMissionStatus = async (mission) => {
+    const goal = goals.find(g => g.id === mission.goal_id);
     const color = goal ? goal.color : '#cbd5e1';
-    if (!status) confetti({ particleCount: 50, spread: 50, origin: { y: 0.7 }, colors: [color] });
-    const { error } = await supabase.from('missions').update({ completed: !status }).eq('id', id);
-    if (!error) {
-      setMissions(missions.map(m => m.id === id ? { ...m, completed: !status } : m));
+    
+    let updates = {};
+    
+    // Cycle Logic
+    if (!mission.completed) {
+        // State 1 -> 2: Done
+        updates = { completed: true, crushed: false };
+        confetti({ particleCount: 30, spread: 40, origin: { y: 0.7 }, colors: [color], scalar: 0.8 });
+    } else if (mission.completed && !mission.crushed) {
+        // State 2 -> 3: CRUSHED
+        updates = { completed: true, crushed: true };
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.7 }, colors: ['#f59e0b', '#fbbf24', '#ffffff'], scalar: 1.2 });
+    } else {
+        // State 3 -> 1: Reset
+        updates = { completed: false, crushed: false, victory_note: '' };
     }
+
+    const { error } = await supabase.from('missions').update(updates).eq('id', mission.id);
+    if (!error) {
+      setMissions(missions.map(m => m.id === mission.id ? { ...m, ...updates } : m));
+    }
+  };
+
+  const saveVictoryNote = async (id, note) => {
+      const { error } = await supabase.from('missions').update({ victory_note: note }).eq('id', id);
+      if (!error) {
+        setMissions(missions.map(m => m.id === id ? { ...m, victory_note: note } : m));
+      }
   };
 
   const deleteMission = async (id) => {
@@ -259,20 +283,11 @@ function VisionBoard({ session }) {
   const handleLogout = async () => { await supabase.auth.signOut(); };
 
   // --- HELPERS ---
-  const getGoalColor = (id) => {
-      const g = goals.find(g => g.id === id);
-      return g ? g.color : '#94a3b8'; // Default slate
-  }
-  const getGoalTitle = (id) => {
-      const g = goals.find(g => g.id === id);
-      return g ? g.title : 'General';
-  }
+  const getGoalColor = (id) => { const g = goals.find(g => g.id === id); return g ? g.color : '#94a3b8'; }
+  const getGoalTitle = (id) => { const g = goals.find(g => g.id === id); return g ? g.title : 'General'; }
 
   // Filter Morning Feed
-  const visibleThoughts = thoughts
-    .filter(t => !t.ignited)
-    .filter(t => filterGoalId === 'all' ? true : t.goal_id === filterGoalId);
-
+  const visibleThoughts = thoughts.filter(t => !t.ignited).filter(t => filterGoalId === 'all' ? true : t.goal_id === filterGoalId);
   const randomQuote = thoughts.filter(t => t.is_quote).length > 0 ? thoughts.filter(t => t.is_quote)[Math.floor(Math.random() * thoughts.filter(t => t.is_quote).length)] : null;
   const nightStyle = { background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', color: 'white', minHeight: '100vh', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
   const morningStyle = { background: 'linear-gradient(135deg, #fdfbf7 0%, #e2e8f0 100%)', color: 'black', minHeight: '100vh', padding: '24px', display: 'flex', flexDirection: 'column' };
@@ -375,7 +390,6 @@ function VisionBoard({ session }) {
              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <h3 style={{ fontSize: '14px', color: '#666', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Tomorrow's Mission</h3>
                 
-                {/* QUICK ADD RECENT */}
                 {recentMissions.length > 0 && (
                     <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}>
                         {recentMissions.map(m => (
@@ -423,16 +437,31 @@ function VisionBoard({ session }) {
                         {missions.length === 0 && <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No missions set for today.</div>}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {missions.map(m => (
-                                <div key={m.id} onClick={() => toggleMission(m.id, m.completed, m.goal_id)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', borderRadius: '12px', background: m.completed ? '#f0fdf4' : '#f8fafc', cursor: 'pointer', borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0', borderLeftWidth: '4px', transition: 'all 0.2s' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-                                        <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? getGoalColor(m.goal_id) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {m.completed && <CheckSquare size={16} color="white" />}
+                                <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '12px', background: m.crushed ? '#fff7ed' : (m.completed ? '#f0fdf4' : '#f8fafc'), borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: m.crushed ? '1px solid #fdba74' : (m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0'), borderLeftWidth: '4px', transition: 'all 0.2s' }}>
+                                    {/* Main Row */}
+                                    <div onClick={() => cycleMissionStatus(m)} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+                                        <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.crushed ? '#f59e0b' : (m.completed ? getGoalColor(m.goal_id) : 'transparent'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {m.crushed ? <Flame size={16} color="white" fill="white" /> : (m.completed && <CheckSquare size={16} color="white" />)}
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)}</span>
+                                            <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? (m.crushed ? '#d97706' : '#86efac') : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span>
                                         </div>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)}</span>
-                                        <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? '#86efac' : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span>
-                                    </div>
+                                    
+                                    {/* Victory Note Input (Only if Crushed) */}
+                                    {m.crushed && (
+                                        <div style={{ marginLeft: '36px', marginTop: '5px' }}>
+                                            <input 
+                                                type="text" 
+                                                placeholder="How did you crush it?" 
+                                                value={m.victory_note || ''} 
+                                                onChange={(e) => saveVictoryNote(m.id, e.target.value)}
+                                                onClick={(e) => e.stopPropagation()} // Prevent toggling when clicking input
+                                                style={{ width: '100%', padding: '8px', fontSize: '13px', border: '1px solid #fed7aa', borderRadius: '6px', background: '#fff', color: '#c2410c', outline: 'none' }}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -440,10 +469,9 @@ function VisionBoard({ session }) {
                 </div>
             )}
 
-            {/* TAB 2: VISION WITH SUB-TABS */}
+            {/* TAB 2: VISION */}
             {activeTab === 'vision' && (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
-                    {/* VISION FILTER TABS */}
                     <div style={{ overflowX: 'auto', display: 'flex', gap: '10px', paddingBottom: '10px', marginBottom: '10px', scrollbarWidth: 'none' }}>
                         <button onClick={() => setFilterGoalId('all')} style={{ whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: '20px', border: 'none', background: filterGoalId === 'all' ? '#0f172a' : '#fff', color: filterGoalId === 'all' ? '#fff' : '#64748b', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>All</button>
                         {goals.map(g => (
