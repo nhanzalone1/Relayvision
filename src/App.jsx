@@ -36,8 +36,8 @@ function Auth({ onLogin }) {
            </div>
         </div>
         <div>
-          <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold' }}>Vision Log.</h1>
-          <p style={{ color: '#888', marginTop: '8px' }}>Secure your future.</p>
+          <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold' }}>Relay Vision.</h1>
+          <p style={{ color: '#888', marginTop: '8px' }}>Pass the baton.</p>
         </div>
         <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '16px', borderRadius: '12px', border: '1px solid #333', background: '#111', color: 'white', fontSize: '16px', outline: 'none' }} required />
@@ -259,7 +259,7 @@ function VisionBoard({ session }) {
 
   const handleCapture = async () => {
     if (!currentInput.trim() && !mediaFile && !audioBlob) return;
-    setUploading(true); setDebugLog('Securing Vision...');
+    setUploading(true); setDebugLog('Securing Relay...');
     let imageUrl = null; let videoUrl = null; let audioUrl = null;
     const timestamp = Date.now();
     try {
@@ -288,7 +288,7 @@ function VisionBoard({ session }) {
       if (error) throw error;
       if (data) {
         setThoughts([data[0], ...thoughts]); calculateStreak([data[0], ...thoughts]);
-        setCurrentInput(''); clearMedia(); setDebugLog('Vision Secured.'); setTimeout(() => setDebugLog(''), 2000);
+        setCurrentInput(''); clearMedia(); setDebugLog('Relay Secured.'); setTimeout(() => setDebugLog(''), 2000);
       }
     } catch (err) { console.error(err); setDebugLog("Error: " + err.message); } finally { setUploading(false); }
   };
@@ -335,12 +335,13 @@ function VisionBoard({ session }) {
           {mode === 'night' ? (
              <>
                <div style={{ display: 'flex', justifyContent: 'center', opacity: 0.9, marginBottom: '15px' }}><Moon size={56} color="#c084fc" style={{ filter: 'drop-shadow(0 0 10px rgba(192, 132, 252, 0.5))' }} /></div>
-               <h1 style={{ fontSize: '36px', fontWeight: 'bold', background: 'linear-gradient(to right, #e9d5ff, #c084fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>Vision Log.</h1>
+               <h1 style={{ fontSize: '36px', fontWeight: 'bold', background: 'linear-gradient(to right, #e9d5ff, #c084fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>Relay Vision.</h1>
+               <p style={{ margin: '8px 0 0 0', color: '#a855f7', opacity: 0.8, letterSpacing: '1px' }}>PASS THE BATON.</p>
              </>
           ) : (
              <div style={{ marginBottom: '10px' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '10px' }}>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><Sun size={32} color="#f59e0b" /><h1 style={{ fontSize: '42px', fontWeight: '800', lineHeight: '1', margin: 0, color: '#1e293b' }}>The Fuel.</h1></div>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><Sun size={32} color="#f59e0b" /><h1 style={{ fontSize: '42px', fontWeight: '800', lineHeight: '1', margin: 0, color: '#1e293b' }}>Relay Vision.</h1></div>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#fff7ed', padding: '6px 12px', borderRadius: '20px', border: '1px solid #ffedd5' }}><Flame size={20} fill={streak > 0 ? "#f97316" : "none"} color="#f97316" /><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#9a3412' }}>{streak} Day{streak !== 1 && 's'}</span></div>
                </div>
              </div>
