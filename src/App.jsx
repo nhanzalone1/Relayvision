@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Trash2, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, CheckCircle, RotateCcw, Trophy, ArrowLeft, Folder, Eraser } from 'lucide-react';
+import { Moon, Trash2, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, CheckCircle, RotateCcw, Trophy, ArrowLeft, Eraser } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 // --- AUTH COMPONENT ---
@@ -63,6 +63,7 @@ export default function App() {
   return <VisionBoard session={session} />;
 }
 
+// --- VISION BOARD COMPONENT ---
 function VisionBoard({ session }) {
   const [mode, setMode] = useState(() => localStorage.getItem('visionMode') || 'night');
   const [activeTab, setActiveTab] = useState('mission'); 
@@ -161,18 +162,39 @@ function VisionBoard({ session }) {
     }
   };
 
+  // --- ROCKET LAUNCH ANIMATION (The Finale) ---
   const triggerGrandFinale = () => {
-    const duration = 3 * 1000;
-    const animationEnd = Date.now() + duration;
-    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
-    const randomInRange = (min, max) => Math.random() * (max - min) + min;
-    const interval = setInterval(function() {
-      const timeLeft = animationEnd - Date.now();
-      if (timeLeft <= 0) { return clearInterval(interval); }
-      const particleCount = 50 * (timeLeft / duration);
-      confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
-      confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
-    }, 250);
+    const duration = 2500;
+    const end = Date.now() + duration;
+
+    (function frame() {
+      // Launch rockets from bottom left
+      confetti({
+        particleCount: 5,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 1 },
+        colors: ['#ef4444', '#f97316'],
+        startVelocity: 60, // FAST launch
+        gravity: 1.2,
+        scalar: 1.2
+      });
+      // Launch rockets from bottom right
+      confetti({
+        particleCount: 5,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 1 },
+        colors: ['#3b82f6', '#8b5cf6'],
+        startVelocity: 60, // FAST launch
+        gravity: 1.2,
+        scalar: 1.2
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    }());
   };
 
   const toggleCompleted = async (mission) => {
@@ -199,7 +221,10 @@ function VisionBoard({ session }) {
 
       if (newCrushed) {
           if (allDone) { triggerGrandFinale(); } 
-          else { confetti({ particleCount: 100, spread: 70, origin: { y: 0.7 }, colors: ['#f59e0b', '#fbbf24', '#ffffff'], scalar: 1.2 }); }
+          else { 
+            // BIGGER burst for crushing
+            confetti({ particleCount: 100, spread: 70, origin: { y: 0.7 }, colors: ['#f59e0b', '#fbbf24', '#ffffff'], scalar: 1.2 }); 
+          }
       }
       const { error } = await supabase.from('missions').update(updates).eq('id', mission.id);
       if (!error) {
@@ -393,7 +418,6 @@ function VisionBoard({ session }) {
                       {!isRecordingAudio && <button onClick={clearMedia} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', zIndex: 10 }}>X</button>}
                     </div>
                  )}
-                 {/* UPDATED PLACEHOLDER HERE */}
                  <textarea value={currentInput} onChange={(e) => setCurrentInput(e.target.value)} placeholder={isQuoteMode ? "Enter the quote..." : "Identify the long-term target..."} style={{ width: '100%', height: '80px', backgroundColor: 'rgba(26, 26, 26, 0.8)', border: isQuoteMode ? '2px solid #f59e0b' : '1px solid #333', borderLeft: `4px solid ${getGoalColor(selectedGoalId)}`, color: isQuoteMode ? '#f59e0b' : 'white', fontStyle: isQuoteMode ? 'italic' : 'normal', outline: 'none', borderRadius: '16px', padding: '16px', fontSize: '18px', resize: 'none', backdropFilter: 'blur(10px)' }} disabled={uploading} />
                  
                  <div style={{ display: 'flex', gap: '8px' }}>
@@ -429,7 +453,6 @@ function VisionBoard({ session }) {
                 )}
 
                 <div style={{ display: 'flex', gap: '10px' }}>
-                    {/* UPDATED PLACEHOLDER HERE */}
                     <input type="text" value={missionInput} onChange={(e) => setMissionInput(e.target.value)} placeholder="Add mission objective" onKeyDown={(e) => e.key === 'Enter' && addMission()} style={{ flex: 1, padding: '12px', borderRadius: '12px', background: '#111', border: '1px solid #333', borderLeft: `4px solid ${getGoalColor(selectedGoalId)}`, color: 'white', outline: 'none' }} />
                     <button onClick={() => addMission()} style={{ background: '#333', border: 'none', borderRadius: '12px', width: '40px', color: 'white', cursor: 'pointer' }}><Plus size={20} /></button>
                 </div>
@@ -481,8 +504,8 @@ function VisionBoard({ session }) {
                                         </button>
                                     </div>
                                     {m.crushed && (
-                                        <div style={{ marginLeft: '36px', marginTop: '5px' }}>
-                                            <input type="text" placeholder="How did you crush it?" value={m.victory_note || ''} onChange={(e) => saveVictoryNote(m.id, e.target.value)} onClick={(e) => e.stopPropagation()} style={{ width: '100%', padding: '8px', fontSize: '13px', border: '1px solid #fed7aa', borderRadius: '6px', background: '#fff', color: '#c2410c', outline: 'none' }} />
+                                        <div style={{ marginLeft: '36px', marginTop: '10px', animation: 'fadeIn 0.5s' }}>
+                                            <input type="text" placeholder="How did you crush it?" value={m.victory_note || ''} onChange={(e) => saveVictoryNote(m.id, e.target.value)} onClick={(e) => e.stopPropagation()} style={{ width: '100%', padding: '12px', fontSize: '14px', border: '1px solid #fed7aa', borderRadius: '12px', background: '#fff', color: '#c2410c', outline: 'none' }} />
                                         </div>
                                     )}
                                 </div>
