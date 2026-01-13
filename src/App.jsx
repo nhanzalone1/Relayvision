@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { Fireworks } from 'fireworks-js';
 
 // --- AUTH COMPONENT ---
 function Auth({ onLogin }) {
@@ -88,10 +89,12 @@ function VisionBoard({ session }) {
   const goalColors = ['#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#64748b'];
   const [newGoalColor, setNewGoalColor] = useState(goalColors[0]);
 
+  // Refs
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const fireworksRef = useRef(null); // Container for fireworks
 
   const [mediaFile, setMediaFile] = useState(null); 
   const [audioBlob, setAudioBlob] = useState(null); 
@@ -161,31 +164,68 @@ function VisionBoard({ session }) {
     }
   };
 
-  // --- NEW CRAZY FIREWORKS ANIMATION ---
+  // --- REAL FIREWORKS ENGINE 🎆 ---
   const triggerGrandFinale = () => {
-    const duration = 3000;
-    const end = Date.now() + duration;
-
-    (function frame() {
-      // Create random bursts across the screen
-      confetti({
-        particleCount: 15, // Fewer particles per burst...
-        angle: Math.random() * 360, // ...but in every direction
-        spread: 360, // Full circle explosion
-        startVelocity: 45,
-        origin: {
-          x: Math.random(), // Random horizontal position
-          y: Math.random() * 0.6 // Random vertical position (top 60% of screen)
+    if (!fireworksRef.current) return;
+    
+    // Initialize the engine
+    const fireworks = new Fireworks(fireworksRef.current, {
+      autoresize: true,
+      opacity: 0.5,
+      acceleration: 1.05,
+      friction: 0.97,
+      gravity: 1.5,
+      particles: 50,
+      traceLength: 3,
+      traceSpeed: 10,
+      explosion: 5,
+      intensity: 30, // Lots of fireworks
+      flickering: 50,
+      lineStyle: 'round',
+      hue: {
+        min: 0,
+        max: 360
+      },
+      delay: {
+        min: 30,
+        max: 60
+      },
+      rocketsPoint: {
+        min: 50,
+        max: 50
+      },
+      lineWidth: {
+        explosion: {
+          min: 1,
+          max: 3
         },
-        colors: ['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#ffffff'], // Victory Colors
-        zIndex: 100,
-        scalar: 1.2,
-      });
-
-      if (Date.now() < end) {
-        requestAnimationFrame(frame);
+        trace: {
+          min: 1,
+          max: 2
+        }
+      },
+      brightness: {
+        min: 50,
+        max: 80
+      },
+      decay: {
+        min: 0.015,
+        max: 0.03
+      },
+      mouse: {
+        click: false,
+        move: false,
+        max: 1
       }
-    }());
+    });
+
+    // Start the show
+    fireworks.start();
+
+    // Stop after 5 seconds
+    setTimeout(() => {
+      fireworks.waitStop(true); // Graceful stop
+    }, 5000);
   };
 
   const toggleCompleted = async (mission) => {
@@ -225,16 +265,12 @@ function VisionBoard({ session }) {
       }
   };
 
-  // --- FIXED TYPING LOGIC ---
   const handleNoteChange = (id, newText) => {
-      // 1. Update LOCAL state immediately (Fast!)
       setMissions(missions.map(m => m.id === id ? { ...m, victory_note: newText } : m));
   };
 
   const handleNoteSave = async (id, newText) => {
-      // 2. Save to DATABASE only when done typing (On Blur)
       await supabase.from('missions').update({ victory_note: newText }).eq('id', id);
-      // Also update history to keep them in sync
       setCrushedHistory(crushedHistory.map(m => m.id === id ? { ...m, victory_note: newText } : m));
   };
 
@@ -338,7 +374,10 @@ function VisionBoard({ session }) {
 
   return (
     <div style={mode === 'night' ? nightStyle : morningStyle}>
-       <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px' }}>
+       {/* FIREWORKS CONTAINER - Invisible until activated */}
+       <div ref={fireworksRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, pointerEvents: 'none' }}></div>
+
+       <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 10 }}>
           <button onClick={() => setMode(mode === 'night' ? 'morning' : 'night')} style={{ border: '1px solid #777', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', color: '#888', background: 'rgba(0,0,0,0.5)', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>{mode === 'night' ? 'Morning ☀️' : 'Capture 🌙'}</button>
           <button onClick={handleLogout} style={{ border: '1px solid #ef4444', padding: '8px', borderRadius: '50%', color: '#ef4444', background: 'rgba(0,0,0,0.1)', cursor: 'pointer' }}><LogOut size={14} /></button>
        </div>
