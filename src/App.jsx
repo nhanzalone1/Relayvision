@@ -4,6 +4,20 @@ import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X,
 import confetti from 'canvas-confetti';
 import { Fireworks } from 'fireworks-js';
 
+// --- GLOBAL STYLES (MOBILE FIXES) ---
+const globalStyles = `
+  * { box-sizing: border-box; }
+  html, body { 
+    margin: 0; 
+    padding: 0; 
+    overflow-x: hidden; 
+    -webkit-text-size-adjust: 100%; 
+  }
+  input, textarea, button, select { 
+    font-size: 16px !important; /* Prevents iPhone Zoom on Focus */
+  }
+`;
+
 // --- AUTH COMPONENT ---
 function Auth({ onLogin }) {
   const [loading, setLoading] = useState(false);
@@ -37,7 +51,8 @@ function Auth({ onLogin }) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', color: 'white' }}>
+    <div style={{ minHeight: '100vh', minHeight: '100dvh', background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', color: 'white' }}>
+      <style>{globalStyles}</style>
       <div style={{ maxWidth: '350px', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
            <div style={{ background: 'rgba(192, 132, 252, 0.1)', padding: '20px', borderRadius: '50%' }}>
@@ -258,10 +273,9 @@ function VisionBoard({ session }) {
 
   const stopAudioRecording = () => { if (mediaRecorderRef.current && isRecordingAudio) { mediaRecorderRef.current.stop(); setIsRecordingAudio(false); setDebugLog(''); } };
   
-  // FIX: Separate the logic to clear media without resetting mode
   const clearMedia = () => { 
     setMediaFile(null); setAudioBlob(null); setMediaType('text'); setPreviewUrl(null); 
-    setIsQuoteMode(false); // This one fully resets
+    setIsQuoteMode(false); 
     if (fileInputRef.current) fileInputRef.current.value = ''; 
     if (videoInputRef.current) videoInputRef.current.value = ''; 
   };
@@ -324,8 +338,8 @@ function VisionBoard({ session }) {
   const getGoalTitle = (id) => { const g = goals.find(g => g.id === id); return g ? g.title : 'General'; }
 
   const randomQuote = thoughts.filter(t => t.is_quote).length > 0 ? thoughts.filter(t => t.is_quote)[Math.floor(Math.random() * thoughts.filter(t => t.is_quote).length)] : null;
-  const nightStyle = { background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', color: 'white', minHeight: '100vh', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
-  const morningStyle = { background: 'linear-gradient(135deg, #fdfbf7 0%, #e2e8f0 100%)', color: 'black', minHeight: '100vh', padding: '24px', display: 'flex', flexDirection: 'column' };
+  const nightStyle = { background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', color: 'white', minHeight: '100dvh', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
+  const morningStyle = { background: 'linear-gradient(135deg, #fdfbf7 0%, #e2e8f0 100%)', color: 'black', minHeight: '100dvh', padding: '24px', display: 'flex', flexDirection: 'column' };
 
   // Helper for sorting thoughts (Active first, then ignited)
   const getSortedThoughts = () => {
@@ -335,6 +349,7 @@ function VisionBoard({ session }) {
 
   return (
     <div style={mode === 'night' ? nightStyle : morningStyle}>
+       <style>{globalStyles}</style> {/* --- INJECT MOBILE FIXES --- */}
        <div ref={fireworksRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, pointerEvents: 'none' }}></div>
 
        <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 10 }}>
@@ -424,7 +439,6 @@ function VisionBoard({ session }) {
                     <button onClick={() => { 
                         const newMode = !isQuoteMode; 
                         setIsQuoteMode(newMode); 
-                        // Just clear the media files, don't call the full clearMedia() which resets the mode
                         setMediaFile(null); 
                         setAudioBlob(null); 
                         setMediaType('text'); 
