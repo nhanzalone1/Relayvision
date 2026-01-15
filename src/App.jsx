@@ -257,7 +257,14 @@ function VisionBoard({ session }) {
   };
 
   const stopAudioRecording = () => { if (mediaRecorderRef.current && isRecordingAudio) { mediaRecorderRef.current.stop(); setIsRecordingAudio(false); setDebugLog(''); } };
-  const clearMedia = () => { setMediaFile(null); setAudioBlob(null); setMediaType('text'); setPreviewUrl(null); setIsQuoteMode(false); if (fileInputRef.current) fileInputRef.current.value = ''; if (videoInputRef.current) videoInputRef.current.value = ''; };
+  
+  // FIX: Separate the logic to clear media without resetting mode
+  const clearMedia = () => { 
+    setMediaFile(null); setAudioBlob(null); setMediaType('text'); setPreviewUrl(null); 
+    setIsQuoteMode(false); // This one fully resets
+    if (fileInputRef.current) fileInputRef.current.value = ''; 
+    if (videoInputRef.current) videoInputRef.current.value = ''; 
+  };
 
   const handleCapture = async () => {
     if (!currentInput.trim() && !mediaFile && !audioBlob) return;
@@ -323,7 +330,7 @@ function VisionBoard({ session }) {
   // Helper for sorting thoughts (Active first, then ignited)
   const getSortedThoughts = () => {
     const relevant = thoughts.filter(t => viewingGoal === 'all' ? true : t.goal_id === viewingGoal.id);
-    return relevant.sort((a, b) => Number(a.ignited) - Number(b.ignited)); // Unignited (0) first, Ignited (1) last
+    return relevant.sort((a, b) => Number(a.ignited) - Number(b.ignited)); 
   };
 
   return (
@@ -412,7 +419,18 @@ function VisionBoard({ session }) {
                     <button onClick={() => fileInputRef.current.click()} disabled={uploading || isRecordingAudio} style={{ flex: 1, height: '50px', background: '#222', border: '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: '#c084fc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={20} /></button>
                     <button onClick={() => videoInputRef.current.click()} disabled={uploading || isRecordingAudio} style={{ flex: 1, height: '50px', background: '#222', border: '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Video size={20} /></button>
                     <button onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording} disabled={uploading} style={{ flex: 1, height: '50px', background: isRecordingAudio ? '#ef4444' : '#222', border: isRecordingAudio ? 'none' : '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: isRecordingAudio ? 'white' : '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isRecordingAudio ? <Square size={20} fill="currentColor" /> : <Mic size={20} />}</button>
-                    <button onClick={() => { setIsQuoteMode(!isQuoteMode); clearMedia(); }} disabled={uploading} style={{ flex: 1, height: '50px', background: isQuoteMode ? '#f59e0b' : '#222', border: isQuoteMode ? 'none' : '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: isQuoteMode ? 'black' : '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><QuoteIcon size={20} /></button>
+                    
+                    {/* FIXED QUOTE BUTTON */}
+                    <button onClick={() => { 
+                        const newMode = !isQuoteMode; 
+                        setIsQuoteMode(newMode); 
+                        // Just clear the media files, don't call the full clearMedia() which resets the mode
+                        setMediaFile(null); 
+                        setAudioBlob(null); 
+                        setMediaType('text'); 
+                        setPreviewUrl(null); 
+                    }} disabled={uploading} style={{ flex: 1, height: '50px', background: isQuoteMode ? '#f59e0b' : '#222', border: isQuoteMode ? 'none' : '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: isQuoteMode ? 'black' : '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><QuoteIcon size={20} /></button>
+                 
                  </div>
                  <button onClick={handleCapture} disabled={uploading || isRecordingAudio} style={{ width: '100%', padding: '16px', backgroundColor: uploading ? '#333' : '#c084fc', color: 'white', fontWeight: 'bold', border: 'none', borderRadius: '16px', cursor: 'pointer', fontSize: '16px', boxShadow: '0 0 15px rgba(192, 132, 252, 0.3)' }}>{uploading ? 'Syncing...' : 'Capture'}</button>
                  
@@ -535,7 +553,9 @@ function VisionBoard({ session }) {
                     
                     <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1px', marginBottom: '10px' }}>The Fuel (Media)</h3>
                     <div style={{ display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '20px', scrollbarWidth: 'none' }}>
-                        {getSortedThoughts().map(t => (
+                        {getSortedThoughts()
+                            .filter(t => !t.is_quote) // <--- INVISIBLE DECK FILTER: Hides quotes from here
+                            .map(t => (
                             <div key={t.id} style={{ minWidth: '260px', background: t.ignited ? '#f8fafc' : 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', opacity: t.ignited ? 0.7 : 1 }}>
                                 {t.image_url && <img src={t.image_url} style={{ width: '100%', height: '180px', objectFit: 'cover', filter: t.ignited ? 'grayscale(100%)' : 'none' }} />}
                                 {t.video_url && <video src={t.video_url} controls style={{ width: '100%', height: '180px', background: 'black' }} />}
@@ -547,7 +567,7 @@ function VisionBoard({ session }) {
                                 </div>
                             </div>
                         ))}
-                        {getSortedThoughts().length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No fuel yet.</p>}
+                        {getSortedThoughts().filter(t => !t.is_quote).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No media fuel yet.</p>}
                     </div>
 
                     <div style={{ marginTop: '20px' }}>
