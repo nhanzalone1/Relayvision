@@ -6,15 +6,16 @@ import { Fireworks } from 'fireworks-js';
 
 // --- GLOBAL STYLES (MOBILE FIXES) ---
 const globalStyles = `
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; touch-action: manipulation; } /* touch-action stops double-tap zoom */
   html, body { 
     margin: 0; 
     padding: 0; 
     overflow-x: hidden; 
     -webkit-text-size-adjust: 100%; 
+    overscroll-behavior-y: none; /* Stops the 'bounce' effect on scroll */
   }
   input, textarea, button, select { 
-    font-size: 16px !important; /* Prevents iPhone Zoom on Focus */
+    font-size: 16px !important; 
   }
 `;
 
@@ -130,6 +131,35 @@ function VisionBoard({ session }) {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [isQuoteMode, setIsQuoteMode] = useState(false);
+
+  // --- MOBILE GESTURE BLOCKER ---
+  useEffect(() => {
+    const preventZoom = (e) => {
+        // Prevent pinch zoom
+        if (e.touches.length > 1) {
+            e.preventDefault();
+        }
+    };
+    
+    // Add passive: false to allow preventDefault
+    document.addEventListener('touchmove', preventZoom, { passive: false });
+    
+    // Prevent double-tap to zoom
+    let lastTouchEnd = 0;
+    const preventDoubleTap = (e) => {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) {
+            e.preventDefault();
+        }
+        lastTouchEnd = now;
+    };
+    document.addEventListener('touchend', preventDoubleTap, { passive: false });
+
+    return () => {
+        document.removeEventListener('touchmove', preventZoom);
+        document.removeEventListener('touchend', preventDoubleTap);
+    };
+  }, []);
 
   useEffect(() => { localStorage.setItem('visionMode', mode); }, [mode]);
   useEffect(() => { fetchThoughts(); fetchMissions(); fetchGoals(); fetchCrushedHistory(); }, [session]);
@@ -349,7 +379,7 @@ function VisionBoard({ session }) {
 
   return (
     <div style={mode === 'night' ? nightStyle : morningStyle}>
-       <style>{globalStyles}</style> {/* --- INJECT MOBILE FIXES --- */}
+       <style>{globalStyles}</style>
        <div ref={fireworksRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, pointerEvents: 'none' }}></div>
 
        <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 10 }}>
@@ -389,19 +419,19 @@ function VisionBoard({ session }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
              {debugLog && <div style={{ background: debugLog.includes('Error') ? '#7f1d1d' : '#064e3b', color: debugLog.includes('Error') ? '#fecaca' : '#a7f3d0', padding: '10px', borderRadius: '8px', fontSize: '12px', textAlign: 'center', border: `1px solid ${debugLog.includes('Error') ? '#ef4444' : '#10b981'}` }}>{debugLog}</div>}
 
-             {/* GOAL SELECTOR */}
+             {/* GOAL SELECTOR - SLEEK CHIP DESIGN */}
              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-                    <button onClick={() => setSelectedGoalId(null)} style={{ padding: '6px 12px', borderRadius: '20px', border: selectedGoalId === null ? '1px solid white' : '1px solid #333', background: selectedGoalId === null ? '#333' : 'transparent', color: 'white', fontSize: '12px', cursor: 'pointer' }}>General</button>
+                    <button onClick={() => setSelectedGoalId(null)} style={{ padding: '8px 16px', borderRadius: '24px', border: selectedGoalId === null ? '1px solid white' : '1px solid #333', background: selectedGoalId === null ? '#333' : 'transparent', color: 'white', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}>General</button>
                     {goals.map(g => (
-                        <div key={g.id} style={{ position: 'relative' }}>
-                            <button onClick={() => setSelectedGoalId(g.id)} style={{ padding: '6px 12px', borderRadius: '20px', border: selectedGoalId === g.id ? '1px solid white' : `1px solid ${g.color}44`, background: selectedGoalId === g.id ? g.color : `${g.color}22`, color: selectedGoalId === g.id ? 'white' : g.color, fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                {g.title}
-                            </button>
-                            <button onClick={(e) => deleteGoal(g.id, e)} style={{ position: 'absolute', top: '-5px', right: '-5px', width: '14px', height: '14px', background: 'red', borderRadius: '50%', border: 'none', color: 'white', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: 0.8 }}>x</button>
+                        <div key={g.id} onClick={() => setSelectedGoalId(g.id)} style={{ padding: '8px 12px 8px 16px', borderRadius: '24px', border: selectedGoalId === g.id ? '1px solid white' : `1px solid ${g.color}44`, background: selectedGoalId === g.id ? g.color : `${g.color}22`, color: selectedGoalId === g.id ? 'white' : g.color, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }}>
+                            {g.title}
+                            <div onClick={(e) => deleteGoal(g.id, e)} style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                <X size={12} color="white" />
+                            </div>
                         </div>
                     ))}
-                    <button onClick={() => setShowGoalCreator(!showGoalCreator)} style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#222', border: '1px solid #444', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Plus size={14} /></button>
+                    <button onClick={() => setShowGoalCreator(!showGoalCreator)} style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#222', border: '1px solid #444', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Plus size={16} /></button>
                  </div>
                  
                  {showGoalCreator && (
