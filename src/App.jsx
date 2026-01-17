@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw } from 'lucide-react';
+import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Fireworks } from 'fireworks-js';
 
@@ -13,10 +13,9 @@ const globalStyles = `
     overflow-x: hidden; 
     -webkit-text-size-adjust: 100%; 
     overscroll-behavior-y: none;
-    scrollbar-width: none; /* Firefox: Hide Scrollbar */
-    -ms-overflow-style: none; /* IE/Edge: Hide Scrollbar */
+    scrollbar-width: none; 
+    -ms-overflow-style: none; 
   }
-  /* Chrome/Safari/Opera: Hide Scrollbar */
   ::-webkit-scrollbar { 
     display: none; 
     width: 0px;
@@ -123,6 +122,9 @@ function VisionBoard({ session }) {
   const [uploading, setUploading] = useState(false);
   const [debugLog, setDebugLog] = useState('');
   
+  // --- DELETE MODAL STATE ---
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, type: null, id: null, title: '' });
+
   const goalColors = ['#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#64748b'];
   const [newGoalColor, setNewGoalColor] = useState(goalColors[0]);
 
@@ -207,12 +209,30 @@ function VisionBoard({ session }) {
     }
   };
 
-  const deleteGoal = async (id, e) => {
+  // --- NEW DELETE LOGIC (CUSTOM MODAL) ---
+  const initiateDeleteGoal = (id, title, e) => {
     e.stopPropagation();
-    if(!window.confirm("Delete this goal?")) return;
-    await supabase.from('goals').delete().eq('id', id);
-    setGoals(goals.filter(g => g.id !== id));
-    if(selectedGoalId === id) setSelectedGoalId(null);
+    setDeleteModal({ isOpen: true, type: 'goal', id, title: `Delete "${title}"?` });
+  };
+
+  const initiateDeleteThought = (id) => {
+    setDeleteModal({ isOpen: true, type: 'thought', id, title: 'Delete this vision?' });
+  };
+
+  const executeDelete = async () => {
+    const { type, id } = deleteModal;
+    if (type === 'goal') {
+        await supabase.from('goals').delete().eq('id', id);
+        setGoals(goals.filter(g => g.id !== id));
+        if(selectedGoalId === id) setSelectedGoalId(null);
+        if(viewingGoal && viewingGoal.id === id) setViewingGoal(null);
+    } else if (type === 'thought') {
+        await supabase.from('thoughts').delete().eq('id', id);
+        const newThoughts = thoughts.filter(t => t.id !== id);
+        setThoughts(newThoughts);
+        calculateStreak(newThoughts);
+    }
+    setDeleteModal({ isOpen: false, type: null, id: null, title: '' });
   };
 
   const addMission = async (taskText = missionInput, goalId = selectedGoalId) => {
@@ -384,6 +404,19 @@ function VisionBoard({ session }) {
        <style>{globalStyles}</style>
        <div ref={fireworksRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, pointerEvents: 'none' }}></div>
 
+        {/* --- CUSTOM DELETE MODAL --- */}
+        {deleteModal.isOpen && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}>
+                <div style={{ background: '#1e293b', padding: '24px', borderRadius: '24px', width: '85%', maxWidth: '300px', textAlign: 'center', border: '1px solid #334155', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+                    <h3 style={{ margin: '0 0 16px 0', color: 'white', fontSize: '18px' }}>{deleteModal.title}</h3>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <button onClick={() => setDeleteModal({ isOpen: false, type: null, id: null, title: '' })} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button>
+                        <button onClick={executeDelete} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: '#ef4444', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>Delete</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
        <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 10 }}>
           <button onClick={() => setMode(mode === 'night' ? 'morning' : 'night')} style={{ border: '1px solid #777', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', color: '#888', background: 'rgba(0,0,0,0.5)', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>{mode === 'night' ? 'Morning ☀️' : 'Capture 🌙'}</button>
           <button onClick={handleLogout} style={{ border: '1px solid #ef4444', padding: '8px', borderRadius: '50%', color: '#ef4444', background: 'rgba(0,0,0,0.1)', cursor: 'pointer' }}><LogOut size={14} /></button>
@@ -428,7 +461,8 @@ function VisionBoard({ session }) {
                     {goals.map(g => (
                         <div key={g.id} onClick={() => setSelectedGoalId(g.id)} style={{ padding: '8px 12px 8px 16px', borderRadius: '24px', border: selectedGoalId === g.id ? '1px solid white' : `1px solid ${g.color}44`, background: selectedGoalId === g.id ? g.color : `${g.color}22`, color: selectedGoalId === g.id ? 'white' : g.color, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }}>
                             {g.title}
-                            <div onClick={(e) => deleteGoal(g.id, e)} style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                            {/* NEW DELETE TRIGGER */}
+                            <div onClick={(e) => initiateDeleteGoal(g.id, g.title, e)} style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                                 <X size={12} color="white" />
                             </div>
                         </div>
@@ -602,7 +636,11 @@ function VisionBoard({ session }) {
                         {getSortedThoughts()
                             .filter(t => !t.is_quote) // <--- INVISIBLE DECK FILTER: Hides quotes from here
                             .map(t => (
-                            <div key={t.id} style={{ minWidth: '260px', background: t.ignited ? '#f8fafc' : 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', opacity: t.ignited ? 0.7 : 1 }}>
+                            <div key={t.id} style={{ position: 'relative', minWidth: '260px', background: t.ignited ? '#f8fafc' : 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', opacity: t.ignited ? 0.7 : 1 }}>
+                                {/* --- DELETE VISION BUTTON --- */}
+                                <div onClick={() => initiateDeleteThought(t.id)} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}>
+                                    <X size={14} color="white" />
+                                </div>
                                 {t.image_url && <img src={t.image_url} style={{ width: '100%', height: '180px', objectFit: 'cover', filter: t.ignited ? 'grayscale(100%)' : 'none' }} />}
                                 {t.video_url && <video src={t.video_url} controls style={{ width: '100%', height: '180px', background: 'black' }} />}
                                 <div style={{ padding: '15px' }}>
