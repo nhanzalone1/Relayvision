@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2, ShieldCheck, AlertCircle, Edit3, Fingerprint, GripVertical, History } from 'lucide-react';
+import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2, ShieldCheck, AlertCircle, Edit3, Fingerprint, GripVertical, History, Users, Link as LinkIcon } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Fireworks } from 'fireworks-js';
 import { Reorder, useDragControls } from "framer-motion";
@@ -123,6 +123,11 @@ function VisionBoard({ session }) {
   const [debugLog, setDebugLog] = useState('');
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, type: null, id: null, title: '' });
   const [protocolModal, setProtocolModal] = useState(false);
+  
+  // Partner Mode State
+  const [partnerModal, setPartnerModal] = useState(false);
+  const [partnerEmail, setPartnerEmail] = useState('');
+  const [currentProfile, setCurrentProfile] = useState(null);
 
   const goalColors = ['#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#64748b'];
   const [newGoalColor, setNewGoalColor] = useState(goalColors[0]);
@@ -152,12 +157,48 @@ function VisionBoard({ session }) {
   }, []);
 
   useEffect(() => { localStorage.setItem('visionMode', mode); }, [mode]);
-  useEffect(() => { fetchThoughts(); fetchMissions(); fetchGoals(); fetchCrushedHistory(); }, [session]);
+  useEffect(() => { fetchThoughts(); fetchMissions(); fetchGoals(); fetchCrushedHistory(); fetchProfile(); }, [session]);
 
-  async function fetchGoals() { const { data } = await supabase.from('goals').select('*').eq('user_id', session.user.id); if (data) setGoals(data); }
-  async function fetchThoughts() { const { data } = await supabase.from('thoughts').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false }); if (data) { setThoughts(data); calculateStreak(data); } }
-  async function fetchMissions() { const { data } = await supabase.from('missions').select('*').eq('user_id', session.user.id).eq('is_active', true).order('created_at', { ascending: true }); if (data) { setMissions(data || []); const recent = data.slice(-10); const uniqueRecents = [...new Map(recent.map(item => [item['task'], item])).values()]; setRecentMissions(uniqueRecents); } }
-  async function fetchCrushedHistory() { const { data } = await supabase.from('missions').select('*').eq('user_id', session.user.id).eq('crushed', true).order('created_at', { ascending: false }); if(data) setCrushedHistory(data); }
+  // --- FETCHING (NOW OPEN TO PARTNERS via RLS) ---
+  // We removed .eq('user_id', session.user.id) so RLS decides who you see
+  async function fetchGoals() { const { data } = await supabase.from('goals').select('*'); if (data) setGoals(data); }
+  async function fetchThoughts() { const { data } = await supabase.from('thoughts').select('*').order('created_at', { ascending: false }); if (data) { setThoughts(data); calculateStreak(data); } }
+  async function fetchMissions() { const { data } = await supabase.from('missions').select('*').eq('is_active', true).order('created_at', { ascending: true }); if (data) { setMissions(data || []); const recent = data.slice(-10); const uniqueRecents = [...new Map(recent.map(item => [item['task'], item])).values()]; setRecentMissions(uniqueRecents); } }
+  async function fetchCrushedHistory() { const { data } = await supabase.from('missions').select('*').eq('crushed', true).order('created_at', { ascending: false }); if(data) setCrushedHistory(data); }
+  
+  async function fetchProfile() {
+      const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+      if(data) setCurrentProfile(data);
+  }
+
+  const linkPartner = async () => {
+      if(!partnerEmail) return;
+      // 1. Find partner ID
+      const { data: partnerData, error: searchError } = await supabase.from('profiles').select('id').eq('email', partnerEmail).single();
+      
+      if(searchError || !partnerData) {
+          alert("Partner not found. They must have an account first.");
+          return;
+      }
+      
+      if(partnerData.id === session.user.id) {
+          alert("You cannot link to yourself.");
+          return;
+      }
+
+      // 2. Link them
+      const { error: updateError } = await supabase.from('profiles').update({ partner_id: partnerData.id, partner_email: partnerEmail }).eq('id', session.user.id);
+      
+      if(!updateError) {
+          alert("Partner Linked! You will now see their visions.");
+          setPartnerModal(false);
+          fetchProfile();
+          // Refresh data to pull partner items
+          fetchGoals(); fetchThoughts(); fetchMissions(); fetchCrushedHistory();
+      } else {
+          alert("Error linking partner.");
+      }
+  };
 
   const clearDailyMissions = async () => {
       if(!window.confirm("Clear the board for tomorrow? (Crushed wins will be saved in folders)")) return;
@@ -276,8 +317,12 @@ function VisionBoard({ session }) {
        <div ref={fireworksRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, pointerEvents: 'none' }}></div>
         {deleteModal.isOpen && ( <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}> <div style={{ background: '#1e293b', padding: '24px', borderRadius: '24px', width: '85%', maxWidth: '300px', textAlign: 'center', border: '1px solid #334155', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}> <h3 style={{ margin: '0 0 16px 0', color: 'white', fontSize: '18px' }}>{deleteModal.title}</h3> <div style={{ display: 'flex', gap: '10px' }}> <button onClick={() => setDeleteModal({ isOpen: false, type: null, id: null, title: '' })} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button> <button onClick={executeDelete} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: '#ef4444', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>Delete</button> </div> </div> </div> )}
         {protocolModal && ( <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.9)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}> <div style={{ background: '#1e293b', padding: '30px', borderRadius: '24px', width: '90%', maxWidth: '340px', textAlign: 'center', border: '2px solid #a855f7', boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}> <Fingerprint size={48} color="#c084fc" style={{ marginBottom: '20px' }} /> <h3 style={{ margin: '0 0 10px 0', color: 'white', fontSize: '22px', fontWeight: '900', textTransform: 'uppercase' }}>Contract With Tomorrow</h3> <p style={{ margin: '0 0 25px 0', color: '#cbd5e1', fontSize: '15px', lineHeight: '1.5' }}> "Does this plan demand your absolute best, or are you negotiating with weakness? Once you execute, there are no edits. Only results." </p> <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}> <button onClick={executeProtocol} style={{ width: '100%', padding: '16px', borderRadius: '16px', border: 'none', background: 'linear-gradient(to right, #c084fc, #a855f7)', color: 'white', fontWeight: '900', fontSize: '16px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px' }}> EXECUTE PROTOCOL </button> <button onClick={() => setProtocolModal(false)} style={{ width: '100%', padding: '12px', borderRadius: '16px', border: 'none', background: 'transparent', color: '#64748b', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}> ABORT </button> </div> </div> </div> )}
+        
+        {/* --- PARTNER PROTOCOL MODAL --- */}
+        {partnerModal && ( <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.9)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}> <div style={{ background: '#1e293b', padding: '30px', borderRadius: '24px', width: '90%', maxWidth: '340px', textAlign: 'center', border: '1px solid #334155', boxShadow: '0 0 40px rgba(0,0,0,0.5)' }}> <Users size={48} color="#60a5fa" style={{ marginBottom: '20px' }} /> <h3 style={{ margin: '0 0 10px 0', color: 'white', fontSize: '22px', fontWeight: '900', textTransform: 'uppercase' }}>Ally Protocol</h3> <p style={{ margin: '0 0 20px 0', color: '#cbd5e1', fontSize: '14px' }}> "Iron sharpens iron. Link with one partner to see their visions and hold them accountable." </p> {currentProfile?.partner_id ? ( <div style={{ background: '#0f172a', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}> <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0 }}>CURRENTLY LINKED TO:</p> <p style={{ color: '#60a5fa', fontWeight: 'bold', margin: '5px 0 0 0' }}>{currentProfile.partner_email}</p> </div> ) : ( <input type="email" placeholder="Partner Email" value={partnerEmail} onChange={(e) => setPartnerEmail(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '12px', background: '#334155', border: '1px solid #475569', color: 'white', marginBottom: '20px', outline: 'none' }} /> )} <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}> {!currentProfile?.partner_id && <button onClick={linkPartner} style={{ width: '100%', padding: '16px', borderRadius: '16px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: '900', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}> <LinkIcon size={16} /> LINK PARTNER </button>} <button onClick={() => setPartnerModal(false)} style={{ width: '100%', padding: '12px', borderRadius: '16px', border: 'none', background: 'transparent', color: '#64748b', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}> CLOSE </button> </div> </div> </div> )}
 
        <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 10 }}>
+          <button onClick={() => setPartnerModal(true)} style={{ border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '50%', padding: '8px', cursor: 'pointer', color: mode === 'night' ? '#64748b' : '#334155' }}> <Users size={16} color={mode === 'night' ? 'white' : 'black'} /> </button>
           {mode === 'morning' ? ( <button onClick={() => setMode('night')} style={{ border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '50%', padding: '8px', cursor: 'pointer', color: '#64748b' }}> <Edit3 size={16} /> </button> ) : ( <button onClick={() => setMode('morning')} style={{ border: '1px solid #777', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', color: '#888', background: 'rgba(0,0,0,0.5)', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>Morning ☀️</button> )}
           <button onClick={handleLogout} style={{ border: '1px solid #ef4444', padding: '8px', borderRadius: '50%', color: '#ef4444', background: 'rgba(0,0,0,0.1)', cursor: 'pointer' }}><LogOut size={14} /></button>
        </div>
