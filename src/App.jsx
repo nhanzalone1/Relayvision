@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2 } from 'lucide-react';
+import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2, ShieldCheck, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Fireworks } from 'fireworks-js';
 
-// --- GLOBAL STYLES (MOBILE FIXES + INVISIBLE SCROLLBAR) ---
+// --- GLOBAL STYLES ---
 const globalStyles = `
   * { box-sizing: border-box; touch-action: manipulation; }
   html, body { 
@@ -122,7 +122,6 @@ function VisionBoard({ session }) {
   const [uploading, setUploading] = useState(false);
   const [debugLog, setDebugLog] = useState('');
   
-  // --- DELETE MODAL STATE ---
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, type: null, id: null, title: '' });
 
   const goalColors = ['#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#64748b'];
@@ -209,7 +208,6 @@ function VisionBoard({ session }) {
     }
   };
 
-  // --- NEW DELETE LOGIC (CUSTOM MODAL) ---
   const initiateDeleteGoal = (id, title, e) => {
     e.stopPropagation();
     setDeleteModal({ isOpen: true, type: 'goal', id, title: `Delete "${title}"?` });
@@ -254,6 +252,22 @@ function VisionBoard({ session }) {
     });
     fireworks.start();
     setTimeout(() => { fireworks.waitStop(true); }, 5000);
+  };
+
+  // --- LOCK IN PROTOCOL (ONE WAY DOOR) ---
+  const handleLockIn = () => {
+     if(missions.filter(m => !m.completed && !m.crushed).length === 0) {
+         if(!window.confirm("Mission Log is empty. Are you sure you want to deploy?")) return;
+     }
+     
+     // Trigger Effect
+     confetti({ particleCount: 150, spread: 100, origin: { y: 0.8 }, colors: ['#c084fc', '#ffffff'] });
+     
+     // Delay transition
+     setTimeout(() => {
+        setMode('morning');
+        window.scrollTo(0,0);
+     }, 1000);
   };
 
   const toggleCompleted = async (mission) => {
@@ -418,7 +432,13 @@ function VisionBoard({ session }) {
         )}
 
        <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 10 }}>
-          <button onClick={() => setMode(mode === 'night' ? 'morning' : 'night')} style={{ border: '1px solid #777', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', color: '#888', background: 'rgba(0,0,0,0.5)', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>{mode === 'night' ? 'Morning ☀️' : 'Capture 🌙'}</button>
+          {mode === 'morning' ? (
+              // MORNING MODE: Minimal header, no switch back (except logout)
+              <></>
+          ) : (
+             // NIGHT MODE: Standard Toggle (just in case) + Logout
+             <button onClick={() => setMode('morning')} style={{ border: '1px solid #777', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', color: '#888', background: 'rgba(0,0,0,0.5)', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>Morning ☀️</button>
+          )}
           <button onClick={handleLogout} style={{ border: '1px solid #ef4444', padding: '8px', borderRadius: '50%', color: '#ef4444', background: 'rgba(0,0,0,0.1)', cursor: 'pointer' }}><LogOut size={14} /></button>
        </div>
 
@@ -549,8 +569,22 @@ function VisionBoard({ session }) {
                             <button onClick={() => deleteMission(m.id)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#444', cursor: 'pointer' }}><X size={14} /></button>
                         </div>
                     ))}
+                    {missions.length === 0 && (
+                        <div style={{ padding: '20px', textAlign: 'center', color: '#444', border: '1px dashed #333', borderRadius: '12px', fontSize: '14px' }}>
+                            No missions assigned yet.
+                        </div>
+                    )}
                 </div>
              </div>
+
+             {/* --- THE LOCK IN BUTTON (ONE WAY DOOR) --- */}
+             <div style={{ marginTop: '30px', paddingBottom: '30px' }}>
+                 <button onClick={handleLockIn} style={{ width: '100%', padding: '20px', background: 'linear-gradient(to right, #c084fc, #a855f7)', color: 'white', border: 'none', borderRadius: '20px', fontSize: '18px', fontWeight: '900', letterSpacing: '1px', cursor: 'pointer', boxShadow: '0 10px 20px -5px rgba(168, 85, 247, 0.4)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                    <ShieldCheck size={24} /> Initiate Protocol
+                 </button>
+                 <p style={{ textAlign: 'center', color: '#555', fontSize: '12px', marginTop: '10px' }}>Locking in prevents retreat.</p>
+             </div>
+
           </div>
         )}
 
@@ -570,7 +604,19 @@ function VisionBoard({ session }) {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#0f172a', fontWeight: '800', fontSize: '18px' }}>
                             <ListTodo size={22} color="#3b82f6" /> Mission Log
                         </div>
-                        {missions.length === 0 && <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No active missions. Prepare tonight.</div>}
+                        
+                        {/* --- SMART EMPTY STATE --- */}
+                        {missions.length === 0 && (
+                            <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: '16px', background: '#f8fafc' }}>
+                                <AlertCircle size={48} color="#cbd5e1" style={{ marginBottom: '10px' }} />
+                                <p style={{ margin: 0, fontWeight: 'bold', color: '#64748b' }}>Protocol Empty.</p>
+                                <p style={{ margin: '5px 0 0 0', fontSize: '14px' }}>Log out or switch to Night Mode to assign objectives.</p>
+                                <button onClick={() => setMode('night')} style={{ marginTop: '15px', padding: '8px 16px', background: '#334155', color: 'white', border: 'none', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
+                                    <Moon size={10} style={{ marginRight: '5px' }} /> Return to Night Mode
+                                </button>
+                            </div>
+                        )}
+
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {missions.map(m => (
                                 <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '12px', background: m.crushed ? '#fff7ed' : (m.completed ? '#f0fdf4' : '#f8fafc'), borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: m.crushed ? '1px solid #fdba74' : (m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0'), borderLeftWidth: '4px', transition: 'all 0.2s' }}>
