@@ -8,23 +8,9 @@ import { Reorder, useDragControls } from "framer-motion";
 // --- GLOBAL STYLES ---
 const globalStyles = `
   * { box-sizing: border-box; touch-action: manipulation; }
-  html, body { 
-    margin: 0; 
-    padding: 0; 
-    overflow-x: hidden; 
-    -webkit-text-size-adjust: 100%; 
-    overscroll-behavior-y: none;
-    scrollbar-width: none; 
-    -ms-overflow-style: none; 
-  }
-  ::-webkit-scrollbar { 
-    display: none; 
-    width: 0px;
-    background: transparent;
-  }
-  input, textarea, button, select { 
-    font-size: 16px !important; 
-  }
+  html, body { margin: 0; padding: 0; overflow-x: hidden; -webkit-text-size-adjust: 100%; overscroll-behavior-y: none; scrollbar-width: none; -ms-overflow-style: none; }
+  ::-webkit-scrollbar { display: none; width: 0px; background: transparent; }
+  input, textarea, button, select { font-size: 16px !important; }
   -webkit-tap-highlight-color: transparent;
 `;
 
@@ -38,25 +24,12 @@ function Auth({ onLogin }) {
   const [message, setMessage] = useState('');
 
   const handleAuth = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage('');
-
-    if (isSignUp && password !== confirmPassword) {
-      setMessage("Passwords do not match.");
-      setLoading(false);
-      return;
-    }
-
+    e.preventDefault(); setLoading(true); setMessage('');
+    if (isSignUp && password !== confirmPassword) { setMessage("Passwords do not match."); setLoading(false); return; }
     let result;
-    if (isSignUp) {
-      result = await supabase.auth.signUp({ email, password });
-    } else {
-      result = await supabase.auth.signInWithPassword({ email, password });
-    }
+    if (isSignUp) { result = await supabase.auth.signUp({ email, password }); } else { result = await supabase.auth.signInWithPassword({ email, password }); }
     const { data, error } = result;
-    if (error) setMessage(error.message);
-    else if (isSignUp && !data.session) setMessage('Check email for confirmation.');
+    if (error) setMessage(error.message); else if (isSignUp && !data.session) setMessage('Check email for confirmation.');
     setLoading(false);
   };
 
@@ -64,23 +37,12 @@ function Auth({ onLogin }) {
     <div style={{ minHeight: '100vh', minHeight: '100dvh', background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', color: 'white' }}>
       <style>{globalStyles}</style>
       <div style={{ maxWidth: '350px', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
-           <div style={{ background: 'rgba(192, 132, 252, 0.1)', padding: '20px', borderRadius: '50%' }}>
-             <Lock size={40} color="#c084fc" />
-           </div>
-        </div>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold' }}>Relay Vision.</h1>
-          <p style={{ color: '#888', marginTop: '8px' }}>Pass the baton.</p>
-        </div>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}> <div style={{ background: 'rgba(192, 132, 252, 0.1)', padding: '20px', borderRadius: '50%' }}> <Lock size={40} color="#c084fc" /> </div> </div>
+        <div> <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold' }}>Relay Vision.</h1> <p style={{ color: '#888', marginTop: '8px' }}>Pass the baton.</p> </div>
         <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '16px', borderRadius: '12px', border: '1px solid #333', background: '#111', color: 'white', fontSize: '16px', outline: 'none' }} required />
           <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '16px', borderRadius: '12px', border: '1px solid #333', background: '#111', color: 'white', fontSize: '16px', outline: 'none' }} required />
-          
-          {isSignUp && (
-            <input type="password" placeholder="Confirm Password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={{ padding: '16px', borderRadius: '12px', border: '1px solid #333', background: '#111', color: 'white', fontSize: '16px', outline: 'none' }} required />
-          )}
-
+          {isSignUp && ( <input type="password" placeholder="Confirm Password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={{ padding: '16px', borderRadius: '12px', border: '1px solid #333', background: '#111', color: 'white', fontSize: '16px', outline: 'none' }} required /> )}
           <button disabled={loading} style={{ padding: '16px', borderRadius: '12px', border: 'none', background: 'white', color: 'black', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>{loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Enter System')}</button>
         </form>
         {message && <p style={{ color: '#ef4444', fontSize: '14px' }}>{message}</p>}
@@ -128,12 +90,11 @@ function VisionBoard({ session }) {
   const [partnerModal, setPartnerModal] = useState(false);
   const [partnerEmail, setPartnerEmail] = useState('');
   const [currentProfile, setCurrentProfile] = useState(null);
-  const [notification, setNotification] = useState(null); // Replaces alert()
+  const [notification, setNotification] = useState(null);
 
   const goalColors = ['#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#64748b'];
   const [newGoalColor, setNewGoalColor] = useState(goalColors[0]);
 
-  // Refs
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -147,7 +108,6 @@ function VisionBoard({ session }) {
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [isQuoteMode, setIsQuoteMode] = useState(false);
 
-  // --- MOBILE GESTURE BLOCKER ---
   useEffect(() => {
     const preventZoom = (e) => { if (e.touches.length > 1) { e.preventDefault(); } };
     document.addEventListener('touchmove', preventZoom, { passive: false });
@@ -160,169 +120,76 @@ function VisionBoard({ session }) {
   useEffect(() => { localStorage.setItem('visionMode', mode); }, [mode]);
   useEffect(() => { fetchThoughts(); fetchMissions(); fetchGoals(); fetchCrushedHistory(); fetchProfile(); }, [session]);
 
-  // --- SHOW NOTIFICATION ---
-  const showNotification = (msg, type = 'success') => {
-      setNotification({ msg, type });
-      setTimeout(() => setNotification(null), 3000);
-  };
+  const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
 
   async function fetchGoals() { const { data } = await supabase.from('goals').select('*'); if (data) setGoals(data); }
   async function fetchThoughts() { const { data } = await supabase.from('thoughts').select('*').order('created_at', { ascending: false }); if (data) { setThoughts(data); calculateStreak(data); } }
   async function fetchMissions() { const { data } = await supabase.from('missions').select('*').eq('is_active', true).order('created_at', { ascending: true }); if (data) { setMissions(data || []); const recent = data.slice(-10); const uniqueRecents = [...new Map(recent.map(item => [item['task'], item])).values()]; setRecentMissions(uniqueRecents); } }
   async function fetchCrushedHistory() { const { data } = await supabase.from('missions').select('*').eq('crushed', true).order('created_at', { ascending: false }); if(data) setCrushedHistory(data); }
-  
-  async function fetchProfile() {
-      const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-      if(data) setCurrentProfile(data);
-  }
+  async function fetchProfile() { const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single(); if(data) setCurrentProfile(data); }
 
-  // --- HANDSHAKE PROTOCOL ---
+  // --- HANDSHAKE PROTOCOL (SECURE RPC) ---
   const sendInvite = async () => {
       if(!partnerEmail) return;
-      // 1. Find partner ID
-      const { data: partnerData, error: searchError } = await supabase.from('profiles').select('id').eq('email', partnerEmail).single();
-      
-      if(searchError || !partnerData) { showNotification("Partner not found.", "error"); return; }
-      if(partnerData.id === session.user.id) { showNotification("Cannot link to yourself.", "error"); return; }
-
-      // 2. Set Status to PENDING for both
-      // Update ME
-      await supabase.from('profiles').update({ 
-          partner_id: partnerData.id, partner_email: partnerEmail, status: 'pending', initiator_id: session.user.id 
-      }).eq('id', session.user.id);
-      
-      // Update THEM
-      await supabase.from('profiles').update({ 
-          partner_id: session.user.id, partner_email: session.user.email, status: 'pending', initiator_id: session.user.id 
-      }).eq('id', partnerData.id);
-      
-      showNotification("Invite Sent. Waiting for response.");
-      fetchProfile();
+      // Use the SECURE RPC function
+      const { error } = await supabase.rpc('send_ally_invite', { target_email: partnerEmail });
+      if (error) {
+          showNotification(error.message, "error");
+      } else {
+          showNotification("Invite Sent. Waiting for response.");
+          fetchProfile();
+      }
   };
 
   const acceptInvite = async () => {
-      // Update BOTH to 'active'
-      await supabase.from('profiles').update({ status: 'active' }).eq('id', session.user.id);
-      await supabase.from('profiles').update({ status: 'active' }).eq('id', currentProfile.partner_id);
-      showNotification("Alliance Established.", "success");
-      confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 }, colors: ['#60a5fa', '#ffffff'] });
-      fetchProfile();
-      fetchGoals(); fetchThoughts(); fetchMissions();
+      // Use the SECURE RPC function
+      const { error } = await supabase.rpc('confirm_alliance');
+      if (!error) {
+          showNotification("Alliance Established.", "success");
+          confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 }, colors: ['#60a5fa', '#ffffff'] });
+          fetchProfile(); fetchGoals(); fetchThoughts(); fetchMissions();
+      }
   };
 
   const declineInvite = async () => {
-      // Reset BOTH to null
-      await supabase.from('profiles').update({ partner_id: null, partner_email: null, status: null, initiator_id: null }).eq('id', session.user.id);
-      await supabase.from('profiles').update({ partner_id: null, partner_email: null, status: null, initiator_id: null }).eq('id', currentProfile.partner_id);
-      showNotification("Invite Declined.", "neutral");
-      fetchProfile();
+      // Use the SECURE RPC function
+      const { error } = await supabase.rpc('sever_connection');
+      if (!error) {
+          showNotification("Connection Severed.", "neutral");
+          fetchProfile();
+      }
   };
 
-  const clearDailyMissions = async () => {
-      if(!window.confirm("Clear the board for tomorrow? (Crushed wins will be saved in folders)")) return;
-      await supabase.from('missions').delete().eq('user_id', session.user.id).eq('crushed', false);
-      await supabase.from('missions').update({ is_active: false }).eq('user_id', session.user.id).eq('crushed', true);
-      setMissions([]); fetchCrushedHistory(); 
-  };
-
-  const createGoal = async () => {
-    if (!newGoalInput.trim()) return;
-    const { data, error } = await supabase.from('goals').insert([{ title: newGoalInput, color: newGoalColor, user_id: session.user.id }]).select();
-    if (!error && data) { setGoals([...goals, data[0]]); setNewGoalInput(''); setShowGoalCreator(false); setSelectedGoalId(data[0].id); }
-  };
-
+  const clearDailyMissions = async () => { if(!window.confirm("Clear the board for tomorrow? (Crushed wins will be saved in folders)")) return; await supabase.from('missions').delete().eq('user_id', session.user.id).eq('crushed', false); await supabase.from('missions').update({ is_active: false }).eq('user_id', session.user.id).eq('crushed', true); setMissions([]); fetchCrushedHistory(); };
+  const createGoal = async () => { if (!newGoalInput.trim()) return; const { data, error } = await supabase.from('goals').insert([{ title: newGoalInput, color: newGoalColor, user_id: session.user.id }]).select(); if (!error && data) { setGoals([...goals, data[0]]); setNewGoalInput(''); setShowGoalCreator(false); setSelectedGoalId(data[0].id); } };
   const initiateDeleteGoal = (id, title, e) => { e.stopPropagation(); setDeleteModal({ isOpen: true, type: 'goal', id, title: `Delete "${title}"?` }); };
   const initiateDeleteThought = (id) => { setDeleteModal({ isOpen: true, type: 'thought', id, title: 'Delete this vision?' }); };
-
-  const executeDelete = async () => {
-    const { type, id } = deleteModal;
-    if (type === 'goal') { await supabase.from('goals').delete().eq('id', id); setGoals(goals.filter(g => g.id !== id)); if(selectedGoalId === id) setSelectedGoalId(null); if(viewingGoal && viewingGoal.id === id) setViewingGoal(null); } 
-    else if (type === 'thought') { await supabase.from('thoughts').delete().eq('id', id); const newThoughts = thoughts.filter(t => t.id !== id); setThoughts(newThoughts); calculateStreak(newThoughts); }
-    setDeleteModal({ isOpen: false, type: null, id: null, title: '' });
-  };
-
-  const addMission = async (taskText = missionInput, goalId = selectedGoalId) => {
-    if (!taskText.trim()) return;
-    const { data, error } = await supabase.from('missions').insert([{ task: taskText, user_id: session.user.id, completed: false, crushed: false, is_active: true, goal_id: goalId }]).select();
-    if (!error && data) { setMissions([...missions, data[0]]); setMissionInput(''); }
-  };
-
-  const triggerGrandFinale = () => {
-    if (!fireworksRef.current) return;
-    const fireworks = new Fireworks(fireworksRef.current, { autoresize: true, opacity: 0.5, acceleration: 1.05, friction: 0.97, gravity: 1.5, particles: 50, traceLength: 3, traceSpeed: 10, explosion: 5, intensity: 30, flickering: 50, lineStyle: 'round', hue: { min: 0, max: 360 }, delay: { min: 30, max: 60 }, rocketsPoint: { min: 50, max: 50 }, lineWidth: { explosion: { min: 1, max: 3 }, trace: { min: 1, max: 2 } }, brightness: { min: 50, max: 80 }, decay: { min: 0.015, max: 0.03 }, mouse: { click: false, move: false, max: 1 } });
-    fireworks.start(); setTimeout(() => { fireworks.waitStop(true); }, 5000);
-  };
-
+  const executeDelete = async () => { const { type, id } = deleteModal; if (type === 'goal') { await supabase.from('goals').delete().eq('id', id); setGoals(goals.filter(g => g.id !== id)); if(selectedGoalId === id) setSelectedGoalId(null); if(viewingGoal && viewingGoal.id === id) setViewingGoal(null); } else if (type === 'thought') { await supabase.from('thoughts').delete().eq('id', id); const newThoughts = thoughts.filter(t => t.id !== id); setThoughts(newThoughts); calculateStreak(newThoughts); } setDeleteModal({ isOpen: false, type: null, id: null, title: '' }); };
+  const addMission = async (taskText = missionInput, goalId = selectedGoalId) => { if (!taskText.trim()) return; const { data, error } = await supabase.from('missions').insert([{ task: taskText, user_id: session.user.id, completed: false, crushed: false, is_active: true, goal_id: goalId }]).select(); if (!error && data) { setMissions([...missions, data[0]]); setMissionInput(''); } };
+  const triggerGrandFinale = () => { if (!fireworksRef.current) return; const fireworks = new Fireworks(fireworksRef.current, { autoresize: true, opacity: 0.5, acceleration: 1.05, friction: 0.97, gravity: 1.5, particles: 50, traceLength: 3, traceSpeed: 10, explosion: 5, intensity: 30, flickering: 50, lineStyle: 'round', hue: { min: 0, max: 360 }, delay: { min: 30, max: 60 }, rocketsPoint: { min: 50, max: 50 }, lineWidth: { explosion: { min: 1, max: 3 }, trace: { min: 1, max: 2 } }, brightness: { min: 50, max: 80 }, decay: { min: 0.015, max: 0.03 }, mouse: { click: false, move: false, max: 1 } }); fireworks.start(); setTimeout(() => { fireworks.waitStop(true); }, 5000); };
   const handleLockIn = () => { if(missions.filter(m => !m.completed && !m.crushed).length === 0) { if(!window.confirm("Mission Log is empty. Deploy anyway?")) return; } setProtocolModal(true); };
   const executeProtocol = () => { setProtocolModal(false); confetti({ particleCount: 150, spread: 100, origin: { y: 0.8 }, colors: ['#c084fc', '#ffffff'] }); setTimeout(() => { setMode('morning'); window.scrollTo(0,0); }, 1000); };
-
-  const toggleCompleted = async (mission) => {
-      const newCompleted = !mission.completed;
-      const updates = { completed: newCompleted, crushed: newCompleted ? mission.crushed : false };
-      const nextMissions = missions.map(m => m.id === mission.id ? { ...m, ...updates } : m);
-      const allDone = nextMissions.length > 0 && nextMissions.every(m => m.completed || m.crushed);
-      if (newCompleted && !mission.completed) { const goal = goals.find(g => g.id === mission.goal_id); const color = goal ? goal.color : '#cbd5e1'; if (allDone) { triggerGrandFinale(); } else { confetti({ particleCount: 30, spread: 40, origin: { y: 0.7 }, colors: [color], scalar: 0.8 }); } }
-      const { error } = await supabase.from('missions').update(updates).eq('id', mission.id);
-      if (!error) { setMissions(nextMissions); }
-  };
-
-  const toggleCrushed = async (mission) => {
-      const newCrushed = !mission.crushed;
-      const updates = { crushed: newCrushed, completed: newCrushed ? true : mission.completed };
-      const nextMissions = missions.map(m => m.id === mission.id ? { ...m, ...updates } : m);
-      const allDone = nextMissions.length > 0 && nextMissions.every(m => m.completed || m.crushed);
-      if (newCrushed) { if (allDone) { triggerGrandFinale(); } else { confetti({ particleCount: 100, spread: 70, origin: { y: 0.7 }, colors: ['#f59e0b', '#fbbf24', '#ffffff'], scalar: 1.2 }); } }
-      const { error } = await supabase.from('missions').update(updates).eq('id', mission.id);
-      if (!error) { setMissions(nextMissions); if(newCrushed) setCrushedHistory([ { ...mission, ...updates }, ...crushedHistory ]); else setCrushedHistory(crushedHistory.filter(m => m.id !== mission.id)); }
-  };
-
+  const toggleCompleted = async (mission) => { const newCompleted = !mission.completed; const updates = { completed: newCompleted, crushed: newCompleted ? mission.crushed : false }; const nextMissions = missions.map(m => m.id === mission.id ? { ...m, ...updates } : m); const allDone = nextMissions.length > 0 && nextMissions.every(m => m.completed || m.crushed); if (newCompleted && !mission.completed) { const goal = goals.find(g => g.id === mission.goal_id); const color = goal ? goal.color : '#cbd5e1'; if (allDone) { triggerGrandFinale(); } else { confetti({ particleCount: 30, spread: 40, origin: { y: 0.7 }, colors: [color], scalar: 0.8 }); } } const { error } = await supabase.from('missions').update(updates).eq('id', mission.id); if (!error) { setMissions(nextMissions); } };
+  const toggleCrushed = async (mission) => { const newCrushed = !mission.crushed; const updates = { crushed: newCrushed, completed: newCrushed ? true : mission.completed }; const nextMissions = missions.map(m => m.id === mission.id ? { ...m, ...updates } : m); const allDone = nextMissions.length > 0 && nextMissions.every(m => m.completed || m.crushed); if (newCrushed) { if (allDone) { triggerGrandFinale(); } else { confetti({ particleCount: 100, spread: 70, origin: { y: 0.7 }, colors: ['#f59e0b', '#fbbf24', '#ffffff'], scalar: 1.2 }); } } const { error } = await supabase.from('missions').update(updates).eq('id', mission.id); if (!error) { setMissions(nextMissions); if(newCrushed) setCrushedHistory([ { ...mission, ...updates }, ...crushedHistory ]); else setCrushedHistory(crushedHistory.filter(m => m.id !== mission.id)); } };
   const handleNoteChange = (id, newText) => { setMissions(missions.map(m => m.id === id ? { ...m, victory_note: newText } : m)); };
   const handleNoteSave = async (id, newText) => { await supabase.from('missions').update({ victory_note: newText }).eq('id', id); setCrushedHistory(crushedHistory.map(m => m.id === id ? { ...m, victory_note: newText } : m)); };
   const deleteMission = async (id) => { const { error } = await supabase.from('missions').delete().eq('id', id); if (!error) setMissions(missions.filter(m => m.id !== id)); };
-
-  const handleFileSelect = (event, type) => {
-    const file = event.target.files[0];
-    if (file) { if (file.size > 50 * 1024 * 1024) { setDebugLog("Error: File too large (Max 50MB)."); return; } setMediaFile(file); setAudioBlob(null); setMediaType(type); setPreviewUrl(URL.createObjectURL(file)); setIsQuoteMode(false); setDebugLog(''); }
-  };
-
-  const startAudioRecording = async () => {
-    try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); let options = {}; if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' }; else if (MediaRecorder.isTypeSupported('audio/webm')) options = { mimeType: 'audio/webm' }; const recorder = new MediaRecorder(stream, options); mediaRecorderRef.current = recorder; audioChunksRef.current = []; recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); }; recorder.onstop = () => { const type = options.mimeType || 'audio/webm'; const blob = new Blob(audioChunksRef.current, { type }); setAudioBlob(blob); setMediaFile(null); setMediaType('audio'); setPreviewUrl(URL.createObjectURL(blob)); setIsQuoteMode(false); stream.getTracks().forEach(track => track.stop()); }; recorder.start(); setIsRecordingAudio(true); setDebugLog('Recording Audio...'); } catch (err) { alert("Microphone access denied."); }
-  };
+  const handleFileSelect = (event, type) => { const file = event.target.files[0]; if (file) { if (file.size > 50 * 1024 * 1024) { setDebugLog("Error: File too large (Max 50MB)."); return; } setMediaFile(file); setAudioBlob(null); setMediaType(type); setPreviewUrl(URL.createObjectURL(file)); setIsQuoteMode(false); setDebugLog(''); } };
+  const startAudioRecording = async () => { try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); let options = {}; if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' }; else if (MediaRecorder.isTypeSupported('audio/webm')) options = { mimeType: 'audio/webm' }; const recorder = new MediaRecorder(stream, options); mediaRecorderRef.current = recorder; audioChunksRef.current = []; recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); }; recorder.onstop = () => { const type = options.mimeType || 'audio/webm'; const blob = new Blob(audioChunksRef.current, { type }); setAudioBlob(blob); setMediaFile(null); setMediaType('audio'); setPreviewUrl(URL.createObjectURL(blob)); setIsQuoteMode(false); stream.getTracks().forEach(track => track.stop()); }; recorder.start(); setIsRecordingAudio(true); setDebugLog('Recording Audio...'); } catch (err) { alert("Microphone access denied."); } };
   const stopAudioRecording = () => { if (mediaRecorderRef.current && isRecordingAudio) { mediaRecorderRef.current.stop(); setIsRecordingAudio(false); setDebugLog(''); } };
   const clearMedia = () => { setMediaFile(null); setAudioBlob(null); setMediaType('text'); setPreviewUrl(null); setIsQuoteMode(false); if (fileInputRef.current) fileInputRef.current.value = ''; if (videoInputRef.current) videoInputRef.current.value = ''; };
-
-  const handleCapture = async () => {
-    if (!currentInput.trim() && !mediaFile && !audioBlob) return; setUploading(true); setDebugLog('Securing Relay...'); let imageUrl = null; let videoUrl = null; let audioUrl = null; const timestamp = Date.now();
-    try {
-      if (mediaFile) { const ext = mediaFile.name.split('.').pop() || 'mov'; const fileName = `${mediaType}-${timestamp}.${ext}`; const { data, error } = await supabase.storage.from('images').upload(fileName, mediaFile); if (error) throw error; if (data) { const publicUrl = supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl; if (mediaType === 'image') imageUrl = publicUrl; if (mediaType === 'video') videoUrl = publicUrl; } }
-      if (audioBlob) { const ext = audioBlob.type.includes('mp4') ? 'mp4' : 'webm'; const fileName = `audio-${timestamp}.${ext}`; const { data, error } = await supabase.storage.from('images').upload(fileName, audioBlob); if (error) throw error; if (data) audioUrl = supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl; }
-      const { data, error } = await supabase.from('thoughts').insert([{ text: currentInput, image_url: imageUrl, video_url: videoUrl, audio_url: audioUrl, is_quote: isQuoteMode, ignited: false, archived: false, user_id: session.user.id, goal_id: selectedGoalId }]).select(); if (error) throw error; if (data) { setThoughts([data[0], ...thoughts]); calculateStreak([data[0], ...thoughts]); setCurrentInput(''); clearMedia(); setDebugLog('Relay Secured.'); setTimeout(() => setDebugLog(''), 2000); }
-    } catch (err) { console.error(err); setDebugLog("Error: " + err.message); } finally { setUploading(false); }
-  };
-
+  const handleCapture = async () => { if (!currentInput.trim() && !mediaFile && !audioBlob) return; setUploading(true); setDebugLog('Securing Relay...'); let imageUrl = null; let videoUrl = null; let audioUrl = null; const timestamp = Date.now(); try { if (mediaFile) { const ext = mediaFile.name.split('.').pop() || 'mov'; const fileName = `${mediaType}-${timestamp}.${ext}`; const { data, error } = await supabase.storage.from('images').upload(fileName, mediaFile); if (error) throw error; if (data) { const publicUrl = supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl; if (mediaType === 'image') imageUrl = publicUrl; if (mediaType === 'video') videoUrl = publicUrl; } } if (audioBlob) { const ext = audioBlob.type.includes('mp4') ? 'mp4' : 'webm'; const fileName = `audio-${timestamp}.${ext}`; const { data, error } = await supabase.storage.from('images').upload(fileName, audioBlob); if (error) throw error; if (data) audioUrl = supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl; } const { data, error } = await supabase.from('thoughts').insert([{ text: currentInput, image_url: imageUrl, video_url: videoUrl, audio_url: audioUrl, is_quote: isQuoteMode, ignited: false, archived: false, user_id: session.user.id, goal_id: selectedGoalId }]).select(); if (error) throw error; if (data) { setThoughts([data[0], ...thoughts]); calculateStreak([data[0], ...thoughts]); setCurrentInput(''); clearMedia(); setDebugLog('Relay Secured.'); setTimeout(() => setDebugLog(''), 2000); } } catch (err) { console.error(err); setDebugLog("Error: " + err.message); } finally { setUploading(false); } };
   function calculateStreak(data) { if (!data || data.length === 0) { setStreak(0); return; } const uniqueDates = [...new Set(data.map(item => new Date(item.created_at).toDateString()))]; const sortedDates = uniqueDates.map(d => new Date(d)).sort((a, b) => b - a); const today = new Date().toDateString(); const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1); if (sortedDates[0].toDateString() !== today && sortedDates[0].toDateString() !== yesterday.toDateString()) { setStreak(0); return; } let currentStreak = 0; let checkDate = new Date(); if (sortedDates[0].toDateString() !== today) checkDate.setDate(checkDate.getDate() - 1); for (let i = 0; i < sortedDates.length; i++) { if (sortedDates[i].toDateString() === checkDate.toDateString()) { currentStreak++; checkDate.setDate(checkDate.getDate() - 1); } else break; } setStreak(currentStreak); }
-
   const deleteThought = async (id) => { const { error } = await supabase.from('thoughts').delete().eq('id', id); if (!error) { const newThoughts = thoughts.filter(t => t.id !== id); setThoughts(newThoughts); calculateStreak(newThoughts); } };
   const toggleIgnite = async (id, currentStatus) => { if (!currentStatus) confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: mode === 'night' ? ['#c084fc', '#a855f7', '#ffffff'] : ['#fbbf24', '#f59e0b', '#ef4444'] }); const { error } = await supabase.from('thoughts').update({ ignited: !currentStatus }).eq('id', id); if (!error) setThoughts(thoughts.map(t => t.id === id ? { ...t, ignited: !t.ignited } : t)); };
-  
-  const toggleArchive = async (id, currentStatus) => { 
-      const { error } = await supabase.from('thoughts').update({ archived: !currentStatus }).eq('id', id); 
-      if (!error) setThoughts(thoughts.map(t => t.id === id ? { ...t, archived: !currentStatus } : t)); 
-  };
-
+  const toggleArchive = async (id, currentStatus) => { const { error } = await supabase.from('thoughts').update({ archived: !currentStatus }).eq('id', id); if (!error) setThoughts(thoughts.map(t => t.id === id ? { ...t, archived: !currentStatus } : t)); };
   const handleLogout = async () => { await supabase.auth.signOut(); };
-
   const getGoalColor = (id) => { const g = goals.find(g => g.id === id); return g ? g.color : '#94a3b8'; }
   const getGoalTitle = (id) => { const g = goals.find(g => g.id === id); return g ? g.title : 'General'; }
   const randomQuote = thoughts.filter(t => t.is_quote && !t.archived).length > 0 ? thoughts.filter(t => t.is_quote && !t.archived)[Math.floor(Math.random() * thoughts.filter(t => t.is_quote && !t.archived).length)] : null;
   const nightStyle = { background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', color: 'white', minHeight: '100dvh', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
   const morningStyle = { background: 'linear-gradient(135deg, #fdfbf7 0%, #e2e8f0 100%)', color: 'black', minHeight: '100dvh', padding: '24px', display: 'flex', flexDirection: 'column' };
-  
-  const getDisplayedThoughts = () => { 
-      const relevant = thoughts.filter(t => viewingGoal === 'all' ? true : t.goal_id === viewingGoal.id); 
-      return relevant.filter(t => showArchives ? t.archived : !t.archived).sort((a, b) => Number(a.ignited) - Number(b.ignited)); 
-  };
-
+  const getDisplayedThoughts = () => { const relevant = thoughts.filter(t => viewingGoal === 'all' ? true : t.goal_id === viewingGoal.id); return relevant.filter(t => showArchives ? t.archived : !t.archived).sort((a, b) => Number(a.ignited) - Number(b.ignited)); };
   const activeMissions = missions.filter(m => !m.completed && !m.crushed);
   const completedMissions = missions.filter(m => m.completed || m.crushed);
   const handleReorder = (newOrder) => { setMissions([...newOrder, ...completedMissions]); };
@@ -331,78 +198,24 @@ function VisionBoard({ session }) {
     <div style={mode === 'night' ? nightStyle : morningStyle}>
        <style>{globalStyles}</style>
        <div ref={fireworksRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, pointerEvents: 'none' }}></div>
-       
-       {/* --- NOTIFICATION TOAST --- */}
-       {notification && (
-           <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 20000, background: notification.type === 'error' ? '#ef4444' : (notification.type === 'success' ? '#10b981' : '#3b82f6'), padding: '12px 24px', borderRadius: '30px', color: 'white', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', animation: 'fadeIn 0.3s' }}>
-               {notification.msg}
-           </div>
-       )}
-
+       {notification && ( <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 20000, background: notification.type === 'error' ? '#ef4444' : (notification.type === 'success' ? '#10b981' : '#3b82f6'), padding: '12px 24px', borderRadius: '30px', color: 'white', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', animation: 'fadeIn 0.3s' }}> {notification.msg} </div> )}
         {deleteModal.isOpen && ( <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}> <div style={{ background: '#1e293b', padding: '24px', borderRadius: '24px', width: '85%', maxWidth: '300px', textAlign: 'center', border: '1px solid #334155', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}> <h3 style={{ margin: '0 0 16px 0', color: 'white', fontSize: '18px' }}>{deleteModal.title}</h3> <div style={{ display: 'flex', gap: '10px' }}> <button onClick={() => setDeleteModal({ isOpen: false, type: null, id: null, title: '' })} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button> <button onClick={executeDelete} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: '#ef4444', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>Delete</button> </div> </div> </div> )}
         {protocolModal && ( <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.9)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}> <div style={{ background: '#1e293b', padding: '30px', borderRadius: '24px', width: '90%', maxWidth: '340px', textAlign: 'center', border: '2px solid #a855f7', boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}> <Fingerprint size={48} color="#c084fc" style={{ marginBottom: '20px' }} /> <h3 style={{ margin: '0 0 10px 0', color: 'white', fontSize: '22px', fontWeight: '900', textTransform: 'uppercase' }}>Contract With Tomorrow</h3> <p style={{ margin: '0 0 25px 0', color: '#cbd5e1', fontSize: '15px', lineHeight: '1.5' }}> "Does this plan demand your absolute best, or are you negotiating with weakness? Once you execute, there are no edits. Only results." </p> <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}> <button onClick={executeProtocol} style={{ width: '100%', padding: '16px', borderRadius: '16px', border: 'none', background: 'linear-gradient(to right, #c084fc, #a855f7)', color: 'white', fontWeight: '900', fontSize: '16px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px' }}> EXECUTE PROTOCOL </button> <button onClick={() => setProtocolModal(false)} style={{ width: '100%', padding: '12px', borderRadius: '16px', border: 'none', background: 'transparent', color: '#64748b', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}> ABORT </button> </div> </div> </div> )}
         
-        {/* --- PARTNER PROTOCOL MODAL (HANDSHAKE) --- */}
         {partnerModal && ( <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.9)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}> 
             <div style={{ background: '#1e293b', padding: '30px', borderRadius: '24px', width: '90%', maxWidth: '340px', textAlign: 'center', border: '1px solid #334155', boxShadow: '0 0 40px rgba(0,0,0,0.5)' }}> 
                 <Users size={48} color={currentProfile?.status === 'active' ? '#10b981' : '#60a5fa'} style={{ marginBottom: '20px' }} /> 
                 <h3 style={{ margin: '0 0 10px 0', color: 'white', fontSize: '22px', fontWeight: '900', textTransform: 'uppercase' }}>Ally Protocol</h3> 
-                
-                {/* STATE 1: ACTIVE ALLIANCE */}
-                {currentProfile?.status === 'active' && (
-                    <>
-                        <p style={{ color: '#10b981', fontWeight: 'bold', fontSize: '14px', marginBottom: '20px' }}>STATUS: ACTIVE</p>
-                        <div style={{ background: '#0f172a', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}> 
-                            <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0 }}>LINKED PARTNER:</p> 
-                            <p style={{ color: 'white', fontWeight: 'bold', margin: '5px 0 0 0' }}>{currentProfile.partner_email}</p> 
-                        </div>
-                        <button onClick={declineInvite} style={{ width: '100%', padding: '12px', borderRadius: '16px', border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}> SEVER CONNECTION </button>
-                    </>
-                )}
-
-                {/* STATE 2: PENDING (SENT BY ME) */}
-                {currentProfile?.status === 'pending' && currentProfile?.initiator_id === session.user.id && (
-                    <>
-                        <p style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '14px', marginBottom: '20px' }}>STATUS: PENDING ACCEPTANCE</p>
-                        <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '20px' }}>Invitation sent to <b>{currentProfile.partner_email}</b>. Waiting for them to confirm.</p>
-                        <button onClick={declineInvite} style={{ width: '100%', padding: '12px', borderRadius: '16px', border: 'none', background: '#334155', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}> CANCEL INVITE </button>
-                    </>
-                )}
-
-                {/* STATE 3: PENDING (INCOMING) */}
-                {currentProfile?.status === 'pending' && currentProfile?.initiator_id !== session.user.id && (
-                    <>
-                        <p style={{ color: '#f97316', fontWeight: 'bold', fontSize: '14px', marginBottom: '20px' }}>INCOMING REQUEST</p>
-                        <p style={{ color: 'white', fontSize: '16px', marginBottom: '20px' }}><b>{currentProfile.partner_email}</b> wants to link protocols.</p>
-                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                            <button onClick={acceptInvite} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', background: '#10b981', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}><Check size={20} /></button>
-                            <button onClick={declineInvite} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', background: '#ef4444', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}><XCircle size={20} /></button>
-                        </div>
-                    </>
-                )}
-
-                {/* STATE 4: NO PARTNER */}
-                {!currentProfile?.partner_id && (
-                    <>
-                        <p style={{ margin: '0 0 20px 0', color: '#cbd5e1', fontSize: '14px' }}> "Iron sharpens iron. Link with one partner to see their visions." </p> 
-                        <input type="email" placeholder="Partner Email" value={partnerEmail} onChange={(e) => setPartnerEmail(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '12px', background: '#334155', border: '1px solid #475569', color: 'white', marginBottom: '20px', outline: 'none' }} /> 
-                        <button onClick={sendInvite} style={{ width: '100%', padding: '16px', borderRadius: '16px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: '900', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '10px' }}> <LinkIcon size={16} /> SEND INVITE </button>
-                    </>
-                )}
-
+                {currentProfile?.status === 'active' && ( <> <p style={{ color: '#10b981', fontWeight: 'bold', fontSize: '14px', marginBottom: '20px' }}>STATUS: ACTIVE</p> <div style={{ background: '#0f172a', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}> <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0 }}>LINKED PARTNER:</p> <p style={{ color: 'white', fontWeight: 'bold', margin: '5px 0 0 0' }}>{currentProfile.partner_email}</p> </div> <button onClick={declineInvite} style={{ width: '100%', padding: '12px', borderRadius: '16px', border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}> SEVER CONNECTION </button> </> )}
+                {currentProfile?.status === 'pending' && currentProfile?.initiator_id === session.user.id && ( <> <p style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '14px', marginBottom: '20px' }}>STATUS: PENDING ACCEPTANCE</p> <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '20px' }}>Invitation sent to <b>{currentProfile.partner_email}</b>. Waiting for them to confirm.</p> <button onClick={declineInvite} style={{ width: '100%', padding: '12px', borderRadius: '16px', border: 'none', background: '#334155', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}> CANCEL INVITE </button> </> )}
+                {currentProfile?.status === 'pending' && currentProfile?.initiator_id !== session.user.id && ( <> <p style={{ color: '#f97316', fontWeight: 'bold', fontSize: '14px', marginBottom: '20px' }}>INCOMING REQUEST</p> <p style={{ color: 'white', fontSize: '16px', marginBottom: '20px' }}><b>{currentProfile.partner_email}</b> wants to link protocols.</p> <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}> <button onClick={acceptInvite} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', background: '#10b981', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}><Check size={20} /></button> <button onClick={declineInvite} style={{ flex: 1, padding: '16px', borderRadius: '16px', border: 'none', background: '#ef4444', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}><XCircle size={20} /></button> </div> </> )}
+                {!currentProfile?.partner_id && ( <> <p style={{ margin: '0 0 20px 0', color: '#cbd5e1', fontSize: '14px' }}> "Iron sharpens iron. Link with one partner to see their visions." </p> <input type="email" placeholder="Partner Email" value={partnerEmail} onChange={(e) => setPartnerEmail(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '12px', background: '#334155', border: '1px solid #475569', color: 'white', marginBottom: '20px', outline: 'none' }} /> <button onClick={sendInvite} style={{ width: '100%', padding: '16px', borderRadius: '16px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: '900', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '10px' }}> <LinkIcon size={16} /> SEND INVITE </button> </> )}
                 <button onClick={() => setPartnerModal(false)} style={{ width: '100%', padding: '12px', borderRadius: '16px', border: 'none', background: 'transparent', color: '#64748b', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}> CLOSE </button> 
             </div> 
         </div> )}
 
-        {/* --- NOTIFICATION BADGE ON ALLY ICON --- */}
        <div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px', zIndex: 10 }}>
-          <div style={{ position: 'relative' }}>
-              <button onClick={() => setPartnerModal(true)} style={{ border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '50%', padding: '8px', cursor: 'pointer', color: mode === 'night' ? '#64748b' : '#334155' }}> <Users size={16} color={mode === 'night' ? 'white' : 'black'} /> </button>
-              {/* Red Dot if Incoming Request */}
-              {currentProfile?.status === 'pending' && currentProfile?.initiator_id !== session.user.id && (
-                  <div style={{ position: 'absolute', top: 0, right: 0, width: '10px', height: '10px', background: '#ef4444', borderRadius: '50%', border: '2px solid #1f1f22' }}></div>
-              )}
-          </div>
+          <div style={{ position: 'relative' }}> <button onClick={() => setPartnerModal(true)} style={{ border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '50%', padding: '8px', cursor: 'pointer', color: mode === 'night' ? '#64748b' : '#334155' }}> <Users size={16} color={mode === 'night' ? 'white' : 'black'} /> </button> {currentProfile?.status === 'pending' && currentProfile?.initiator_id !== session.user.id && ( <div style={{ position: 'absolute', top: 0, right: 0, width: '10px', height: '10px', background: '#ef4444', borderRadius: '50%', border: '2px solid #1f1f22' }}></div> )} </div>
           {mode === 'morning' ? ( <button onClick={() => setMode('night')} style={{ border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '50%', padding: '8px', cursor: 'pointer', color: '#64748b' }}> <Edit3 size={16} /> </button> ) : ( <button onClick={() => setMode('morning')} style={{ border: '1px solid #777', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', color: '#888', background: 'rgba(0,0,0,0.5)', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>Morning ☀️</button> )}
           <button onClick={handleLogout} style={{ border: '1px solid #ef4444', padding: '8px', borderRadius: '50%', color: '#ef4444', background: 'rgba(0,0,0,0.1)', cursor: 'pointer' }}><LogOut size={14} /></button>
        </div>
@@ -417,9 +230,7 @@ function VisionBoard({ session }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
              {debugLog && <div style={{ background: debugLog.includes('Error') ? '#7f1d1d' : '#064e3b', color: debugLog.includes('Error') ? '#fecaca' : '#a7f3d0', padding: '10px', borderRadius: '8px', fontSize: '12px', textAlign: 'center', border: `1px solid ${debugLog.includes('Error') ? '#ef4444' : '#10b981'}` }}>{debugLog}</div>}
              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}> <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}> <button onClick={() => setSelectedGoalId(null)} style={{ padding: '8px 16px', borderRadius: '24px', border: selectedGoalId === null ? '1px solid white' : '1px solid #333', background: selectedGoalId === null ? '#333' : 'transparent', color: 'white', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}>General</button> {goals.map(g => ( <div key={g.id} onClick={() => setSelectedGoalId(g.id)} style={{ padding: '8px 12px 8px 16px', borderRadius: '24px', border: selectedGoalId === g.id ? '1px solid white' : `1px solid ${g.color}44`, background: selectedGoalId === g.id ? g.color : `${g.color}22`, color: selectedGoalId === g.id ? 'white' : g.color, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }}> {g.title} <div onClick={(e) => initiateDeleteGoal(g.id, g.title, e)} style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}> <X size={12} color="white" /> </div> </div> ))} <button onClick={() => setShowGoalCreator(!showGoalCreator)} style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#222', border: '1px solid #444', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Plus size={16} /></button> </div> {showGoalCreator && ( <div style={{ background: '#111', padding: '15px', borderRadius: '16px', border: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '5px' }}> <h4 style={{ margin: 0, fontSize: '12px', color: '#666' }}>NEW GOAL (e.g. "Get Lean")</h4> <input type="text" value={newGoalInput} onChange={(e) => setNewGoalInput(e.target.value)} placeholder="Goal Title" style={{ background: '#222', border: '1px solid #444', color: 'white', padding: '8px', borderRadius: '8px', outline: 'none' }} /> <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}> {goalColors.map(c => <button key={c} onClick={() => setNewGoalColor(c)} style={{ width: '20px', height: '20px', borderRadius: '50%', background: c, border: newGoalColor === c ? '2px solid white' : 'none', cursor: 'pointer' }} />)} </div> <button onClick={createGoal} style={{ background: '#fff', color: 'black', border: 'none', padding: '8px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Create Goal</button> </div> )} </div>
-
              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}> <h3 style={{ fontSize: '14px', color: '#666', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Capture Vision</h3> {(previewUrl || isRecordingAudio) && ( <div style={{ position: 'relative', width: '100%', minHeight: '120px', background: '#111', borderRadius: '16px', overflow: 'hidden', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}> {mediaType === 'image' && <img src={previewUrl} style={{ width: '100%', maxHeight: '300px', objectFit: 'cover' }} />} {mediaType === 'video' && <video src={previewUrl} controls playsInline style={{ width: '100%', maxHeight: '300px' }} />} {isRecordingAudio && <div style={{ color: '#ef4444', fontWeight: 'bold', animation: 'pulse 1s infinite' }}>Recording Audio... (Tap Stop)</div>} {mediaType === 'audio' && !isRecordingAudio && <audio src={previewUrl} controls style={{ width: '90%' }} />} {!isRecordingAudio && <button onClick={clearMedia} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', zIndex: 10 }}>X</button>} </div> )} <textarea value={currentInput} onChange={(e) => setCurrentInput(e.target.value)} placeholder={isQuoteMode ? "Enter the quote..." : "Identify the long-term target..."} style={{ width: '100%', height: '80px', backgroundColor: 'rgba(26, 26, 26, 0.8)', border: isQuoteMode ? '2px solid #f59e0b' : '1px solid #333', borderLeft: `4px solid ${getGoalColor(selectedGoalId)}`, color: isQuoteMode ? '#f59e0b' : 'white', fontStyle: isQuoteMode ? 'italic' : 'normal', outline: 'none', borderRadius: '16px', padding: '16px', fontSize: '18px', resize: 'none', backdropFilter: 'blur(10px)' }} disabled={uploading} /> <div style={{ display: 'flex', gap: '8px' }}> <button onClick={() => fileInputRef.current.click()} disabled={uploading || isRecordingAudio} style={{ flex: 1, height: '50px', background: '#222', border: '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: '#c084fc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={20} /></button> <button onClick={() => videoInputRef.current.click()} disabled={uploading || isRecordingAudio} style={{ flex: 1, height: '50px', background: '#222', border: '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Video size={20} /></button> <button onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording} disabled={uploading} style={{ flex: 1, height: '50px', background: isRecordingAudio ? '#ef4444' : '#222', border: isRecordingAudio ? 'none' : '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: isRecordingAudio ? 'white' : '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isRecordingAudio ? <Square size={20} fill="currentColor" /> : <Mic size={20} />}</button> <button onClick={() => { const newMode = !isQuoteMode; setIsQuoteMode(newMode); setMediaFile(null); setAudioBlob(null); setMediaType('text'); setPreviewUrl(null); }} disabled={uploading} style={{ flex: 1, height: '50px', background: isQuoteMode ? '#f59e0b' : '#222', border: isQuoteMode ? 'none' : '1px solid #333', borderRadius: '12px', cursor: 'pointer', color: isQuoteMode ? 'black' : '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><QuoteIcon size={20} /></button> </div> <button onClick={handleCapture} disabled={uploading || isRecordingAudio} style={{ width: '100%', padding: '16px', backgroundColor: uploading ? '#333' : '#c084fc', color: 'white', fontWeight: 'bold', border: 'none', borderRadius: '16px', cursor: 'pointer', fontSize: '16px', boxShadow: '0 0 15px rgba(192, 132, 252, 0.3)' }}>{uploading ? 'Syncing...' : 'Capture'}</button> <input type="file" accept="image/*" ref={fileInputRef} onChange={(e) => handleFileSelect(e, 'image')} style={{ display: 'none' }} /> <input type="file" accept="video/*" capture="environment" ref={videoInputRef} onChange={(e) => handleFileSelect(e, 'video')} style={{ display: 'none' }} /> </div>
-
              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}> <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}> <h3 style={{ fontSize: '14px', color: '#666', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Tomorrow's Mission</h3> <button onClick={clearDailyMissions} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: '1px solid #444', color: '#888', borderRadius: '12px', padding: '4px 8px', fontSize: '10px', cursor: 'pointer' }}> <Eraser size={10} /> CLEAR LOG </button> </div> {recentMissions.length > 0 && ( <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '5px' }}> {recentMissions.map(m => ( <button key={'recent-'+m.id} onClick={() => addMission(m.task, m.goal_id)} style={{ whiteSpace: 'nowrap', background: '#222', border: '1px solid #333', color: '#888', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}> <RotateCcw size={10} /> {m.task} </button> ))} </div> )} <div style={{ display: 'flex', gap: '10px' }}> <input type="text" value={missionInput} onChange={(e) => setMissionInput(e.target.value)} placeholder="Add mission objective" onKeyDown={(e) => e.key === 'Enter' && addMission()} style={{ flex: 1, padding: '12px', borderRadius: '12px', background: '#111', border: '1px solid #333', borderLeft: `4px solid ${getGoalColor(selectedGoalId)}`, color: 'white', outline: 'none' }} /> <button onClick={() => addMission()} style={{ background: '#333', border: 'none', borderRadius: '12px', width: '40px', color: 'white', cursor: 'pointer' }}><Plus size={20} /></button> </div>
               <Reorder.Group axis="y" values={activeMissions} onReorder={handleReorder} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: 0, listStyle: 'none' }}> {activeMissions.map(m => ( <Reorder.Item key={m.id} value={m} style={{ background: '#1a1a1a', padding: '8px 12px', borderRadius: '12px', border: '1px solid #333', display: 'flex', alignItems: 'center', gap: '12px' }}> <div style={{ color: '#444', cursor: 'grab', display: 'flex', alignItems: 'center' }}><GripVertical size={16} /></div> <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: getGoalColor(m.goal_id) }}></div> <span style={{ fontSize: '14px', color: '#ddd', flex: 1 }}>{m.task}</span> <button onClick={() => deleteMission(m.id)} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer' }}><X size={14} /></button> </Reorder.Item> ))} </Reorder.Group> {activeMissions.length === 0 && ( <div style={{ padding: '20px', textAlign: 'center', color: '#444', border: '1px dashed #333', borderRadius: '12px', fontSize: '14px' }}> No missions assigned yet. </div> )} </div>
              <div style={{ marginTop: '30px', paddingBottom: '30px' }}> <button onClick={handleLockIn} style={{ width: '100%', padding: '20px', background: 'linear-gradient(to right, #c084fc, #a855f7)', color: 'white', border: 'none', borderRadius: '20px', fontSize: '18px', fontWeight: '900', letterSpacing: '1px', cursor: 'pointer', boxShadow: '0 10px 20px -5px rgba(168, 85, 247, 0.4)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}> <ShieldCheck size={24} /> Initiate Protocol </button> <p style={{ textAlign: 'center', color: '#555', fontSize: '12px', marginTop: '10px' }}>Locking in prevents retreat.</p> </div>
