@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2, ShieldCheck, AlertCircle, Edit3, Fingerprint, GripVertical, History, Users, Link as LinkIcon, Check, XCircle, MessageCircle, Heart, Send, Unlock, Save } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -133,38 +133,66 @@ function VisionBoard({ session }) {
   }, []);
 
   useEffect(() => { localStorage.setItem('visionMode', mode); }, [mode]);
+  
+  // INITIAL FETCH
   useEffect(() => { fetchAllData(); }, [session]);
 
   const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
 
-  async function fetchAllData() {
-      fetchProfile();
+  // --- DATA FETCHING ---
+  const fetchAllData = useCallback(async () => {
+      await fetchProfile(); // Ensure profile is fresh
+      
       const { data: gData } = await supabase.from('goals').select('*');
       if (gData) {
           setMyGoals(gData.filter(i => i.user_id === session.user.id));
           setPartnerGoals(gData.filter(i => i.user_id !== session.user.id));
       }
+      
       const { data: tData } = await supabase.from('thoughts').select('*').order('created_at', { ascending: false });
       if (tData) {
           setMyThoughts(tData.filter(i => i.user_id === session.user.id));
           setPartnerThoughts(tData.filter(i => i.user_id !== session.user.id));
           calculateStreak(tData.filter(i => i.user_id === session.user.id));
       }
+      
       const { data: mData } = await supabase.from('missions').select('*').order('created_at', { ascending: true });
       if (mData) {
           setMyMissions(mData.filter(i => i.user_id === session.user.id && i.is_active));
-          // Filter active AND completed partner missions that are NOT crushed (or just active on board)
-          // Actually, we want to see everything that is "on the board" for the partner
           setPartnerMissions(mData.filter(i => i.user_id !== session.user.id && i.is_active));
           
           const recent = mData.filter(i => i.user_id === session.user.id).slice(-10); 
           const uniqueRecents = [...new Map(recent.map(item => [item['task'], item])).values()];
           setRecentMissions(uniqueRecents);
           
-          // Crushed history contains EVERYONE'S crushed goals
           setCrushedHistory(mData.filter(i => i.crushed));
       }
-  }
+  }, [session]);
+
+  // --- REALTIME ENGINE ---
+  useEffect(() => {
+    // Subscribe to ALL relevant tables
+    const channel = supabase.channel('db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+        // Trigger a fresh fetch on any change
+        fetchAllData(); 
+        
+        // Custom Notifications for Partner Activity
+        if (payload.table === 'missions' && payload.eventType === 'UPDATE') {
+            // Did partner complete a task?
+            if (payload.new.completed && !payload.old.completed && payload.new.user_id !== session.user.id) {
+               showNotification("Partner completed a mission!", "success");
+            }
+            // Did partner send a cheer?
+            if (payload.new.cheer_note && payload.new.cheer_note !== payload.old.cheer_note && payload.new.user_id === session.user.id) {
+               showNotification(`Partner sent a boost: "${payload.new.cheer_note}"`);
+            }
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session, fetchAllData]);
   
   async function fetchProfile() { const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single(); if(data) setCurrentProfile(data); }
 
@@ -273,7 +301,7 @@ function VisionBoard({ session }) {
 
         {mode === 'night' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
-             {/* ... (Night Mode Logic - Hidden for Brevity) ... */}
+             {/* ... (Night Mode Logic - Same as before) ... */}
              {debugLog && <div style={{ background: debugLog.includes('Error') ? '#7f1d1d' : '#064e3b', color: debugLog.includes('Error') ? '#fecaca' : '#a7f3d0', padding: '10px', borderRadius: '8px', fontSize: '12px', textAlign: 'center', border: `1px solid ${debugLog.includes('Error') ? '#ef4444' : '#10b981'}` }}>{debugLog}</div>}
              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}> 
                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}> 
@@ -350,14 +378,17 @@ function VisionBoard({ session }) {
 
         {mode === 'morning' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '40px' }}>
-            {/* ... (Mission Tab Code Same as Before) ... */}
-            {activeTab === 'mission' && ( <div style={{ animation: 'fadeIn 0.3s' }}> {randomQuote && ( <div style={{ padding: '20px', background: 'white', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px', textAlign: 'center' }}> <QuoteIcon size={24} color="#cbd5e1" style={{ marginBottom: '10px' }} /> <p style={{ margin: 0, fontSize: '18px', fontStyle: 'italic', fontWeight: '600', color: '#334155', lineHeight: '1.5' }}>"{randomQuote.text}"</p> </div> )} <div style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}> <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#0f172a', fontWeight: '800', fontSize: '18px' }}> <ListTodo size={22} color="#3b82f6" /> Mission Log </div> {myMissions.length === 0 && ( <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: '16px', background: '#f8fafc' }}> <AlertCircle size={48} color="#cbd5e1" style={{ marginBottom: '10px' }} /> <p style={{ margin: 0, fontWeight: 'bold', color: '#64748b' }}>Protocol Empty.</p> <p style={{ margin: '5px 0 0 0', fontSize: '14px' }}>Log out or switch to Night Mode to assign objectives.</p> <button onClick={() => setMode('night')} style={{ marginTop: '15px', padding: '8px 16px', background: '#334155', color: 'white', border: 'none', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}> <Moon size={10} style={{ marginRight: '5px' }} /> Return to Night Mode </button> </div> )} <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}> {myMissions.map(m => ( <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '12px', background: m.crushed ? '#fff7ed' : (m.completed ? '#f0fdf4' : '#f8fafc'), borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: m.crushed ? '1px solid #fdba74' : (m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0'), borderLeftWidth: '4px', transition: 'all 0.2s' }}> <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}> <div onClick={() => toggleCompleted(m)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}> <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? getGoalColor(m.goal_id) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}> {m.completed && <CheckSquare size={16} color="white" />} </div> <div style={{ display: 'flex', flexDirection: 'column' }}> <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)} {m.is_private && <Lock size={8} />}</span> <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? (m.crushed ? '#d97706' : '#86efac') : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span> </div> </div> <button onClick={() => toggleCrushed(m)} style={{ background: m.crushed ? '#f59e0b' : 'transparent', border: m.crushed ? 'none' : '1px solid #e2e8f0', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}> <Flame size={16} color={m.crushed ? 'white' : '#cbd5e1'} fill={m.crushed ? 'white' : 'transparent'} /> </button> </div> {m.cheer_note && (<div style={{ marginTop: '5px', fontSize: '12px', color: '#60a5fa', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}><MessageCircle size={12} /> Partner: "{m.cheer_note}"</div>)} {m.crushed && ( <div style={{ marginTop: '10px', animation: 'fadeIn 0.5s', display: 'flex', gap: '8px' }}> <input type="text" placeholder="How did you crush it?" value={m.victory_note || ''} onChange={(e) => handleNoteChange(m.id, e.target.value)} style={{ flex: 1, padding: '10px', fontSize: '14px', border: '1px solid #fed7aa', borderRadius: '12px', background: '#fff', color: '#c2410c', outline: 'none' }} /> <button onClick={() => handleNoteSave(m.id, m.victory_note)} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '0 16px', borderRadius: '12px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>CONFIRM</button> </div> )} </div> ))} </div> </div> </div> )}
+            
+            {/* --- MISSION TAB --- */}
+            {activeTab === 'mission' && ( <div style={{ animation: 'fadeIn 0.3s' }}> {randomQuote && ( <div style={{ padding: '20px', background: 'white', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px', textAlign: 'center' }}> <QuoteIcon size={24} color="#cbd5e1" style={{ marginBottom: '10px' }} /> <p style={{ margin: 0, fontSize: '18px', fontStyle: 'italic', fontWeight: '600', color: '#334155', lineHeight: '1.5' }}>"{randomQuote.text}"</p> </div> )} <div style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}> <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#0f172a', fontWeight: '800', fontSize: '18px' }}> <ListTodo size={22} color="#3b82f6" /> Mission Log </div> {myMissions.length === 0 && ( <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: '16px', background: '#f8fafc' }}> <AlertCircle size={48} color="#cbd5e1" style={{ marginBottom: '10px' }} /> <p style={{ margin: 0, fontWeight: 'bold', color: '#64748b' }}>Protocol Empty.</p> <p style={{ margin: '5px 0 0 0', fontSize: '14px' }}>Log out or switch to Night Mode to assign objectives.</p> <button onClick={() => setMode('night')} style={{ marginTop: '15px', padding: '8px 16px', background: '#334155', color: 'white', border: 'none', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}> <Moon size={10} style={{ marginRight: '5px' }} /> Return to Night Mode </button> </div> )} <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}> {myMissions.map(m => ( <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '12px', background: m.crushed ? '#fff7ed' : (m.completed ? '#f0fdf4' : '#f8fafc'), borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: m.crushed ? '1px solid #fdba74' : (m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0'), borderLeftWidth: '4px', transition: 'all 0.2s' }}> <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}> <div onClick={() => toggleCompleted(m)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}> <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? getGoalColor(m.goal_id) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}> {m.completed && <CheckSquare size={16} color="white" />} </div> <div style={{ display: 'flex', flexDirection: 'column' }}> <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)} {m.is_private && <Lock size={8} />}</span> <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? (m.crushed ? '#d97706' : '#86efac') : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span> </div> </div> <button onClick={() => toggleCrushed(m)} style={{ background: m.crushed ? '#f59e0b' : 'transparent', border: m.crushed ? 'none' : '1px solid #e2e8f0', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}> <Flame size={16} color={m.crushed ? 'white' : '#cbd5e1'} fill={m.crushed ? 'white' : 'transparent'} /> </button> </div> {m.cheer_note && (<div style={{ marginTop: '5px', fontSize: '12px', color: '#60a5fa', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}><MessageCircle size={12} /> Partner: "{m.cheer_note}"</div>)} 
+            
+            {m.crushed && ( <div style={{ marginTop: '10px', animation: 'fadeIn 0.5s', display: 'flex', gap: '8px' }}> <input type="text" placeholder="How did you crush it?" value={m.victory_note || ''} onChange={(e) => handleNoteChange(m.id, e.target.value)} style={{ flex: 1, padding: '10px', fontSize: '14px', border: '1px solid #fed7aa', borderRadius: '12px', background: '#fff', color: '#c2410c', outline: 'none' }} /> <button onClick={() => handleNoteSave(m.id, m.victory_note)} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '0 16px', borderRadius: '12px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>CONFIRM</button> </div> )} </div> ))} </div> </div> </div> )}
 
-            {/* ... (Vision Tab Code Same as Before) ... */}
+            {/* ... (Vision Tab Same as Before) ... */}
             {activeTab === 'vision' && !viewingGoal && ( <div style={{ animation: 'fadeIn 0.3s', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}> <div onClick={() => setViewingGoal('all')} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}> <div style={{ background: '#f1f5f9', padding: '15px', borderRadius: '50%' }}><Archive size={24} color="#64748b" /></div> <span style={{ fontWeight: 'bold', color: '#334155' }}>All Visions</span> </div> {myGoals.map(g => ( <div key={g.id} onClick={() => setViewingGoal(g)} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', borderTop: `4px solid ${g.color}`, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}> <div style={{ background: `${g.color}20`, padding: '15px', borderRadius: '50%' }}><Target size={24} color={g.color} /></div> <span style={{ fontWeight: 'bold', color: '#334155', textAlign: 'center' }}>{g.title}</span> {g.is_private && <Lock size={12} color="#94a3b8" style={{ marginTop: '5px' }} />} <span style={{ fontSize: '10px', color: '#94a3b8' }}>{myThoughts.filter(t => t.goal_id === g.id).length} Items</span> </div> ))} {myGoals.length === 0 && <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '14px' }}>No goals created yet. Use Night Mode to add goals.</div>} </div> )}
             {activeTab === 'vision' && viewingGoal && ( <div style={{ animation: 'fadeIn 0.3s' }}> <button onClick={() => { setViewingGoal(null); setShowArchives(false); }} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', color: '#64748b', fontSize: '14px', marginBottom: '15px', cursor: 'pointer' }}><ArrowLeft size={16} /> Back to Folders</button> <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}> <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: 0 }}>{viewingGoal === 'all' ? 'All Visions' : viewingGoal.title}</h2> {viewingGoal !== 'all' && ( <button onClick={() => toggleGoalPrivacy(viewingGoal)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: viewingGoal.is_private ? '#ef4444' : '#94a3b8' }}> {viewingGoal.is_private ? <Lock size={20} /> : <Unlock size={20} />} </button> )} </div> <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}> <button onClick={() => setShowArchives(!showArchives)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', background: showArchives ? '#334155' : 'white', color: showArchives ? 'white' : '#64748b', border: '1px solid #cbd5e1', padding: '8px', borderRadius: '12px', cursor: 'pointer', fontSize: '12px' }}> {showArchives ? <Target size={14} /> : <History size={14} />} {showArchives ? 'Current' : 'Vault'} </button> </div> <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1px', marginBottom: '10px' }}>{showArchives ? 'The Hall of Fame (Archived)' : 'The Fuel (Media)'}</h3> <div style={{ display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '20px', scrollbarWidth: 'none' }}> {getDisplayedThoughts().filter(t => !t.is_quote).map(t => ( <div key={t.id} style={{ position: 'relative', minWidth: '260px', background: t.ignited ? '#f8fafc' : 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', opacity: t.ignited ? 0.7 : 1 }}> <div onClick={() => initiateDeleteThought(t.id)} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}> <X size={14} color="white" /> </div> {t.image_url && <img src={t.image_url} style={{ width: '100%', height: '180px', objectFit: 'cover', filter: t.ignited ? 'grayscale(100%)' : 'none' }} />} {t.video_url && <video src={t.video_url} controls style={{ width: '100%', height: '180px', background: 'black' }} />} <div style={{ padding: '15px' }}> <p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: t.ignited ? '#94a3b8' : '#1e293b', textDecoration: t.ignited ? 'line-through' : 'none' }}>"{t.text}"</p> {t.is_private && <div style={{ marginTop: '5px', fontSize: '10px', color: '#ef4444', fontWeight: 'bold' }}><Lock size={10} /> PRIVATE</div>} <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}> <button onClick={() => toggleIgnite(t.id, t.ignited)} style={{ flex: 1, padding: '8px', background: t.ignited ? '#fff7ed' : '#f1f5f9', color: t.ignited ? '#f59e0b' : '#64748b', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}> {t.ignited ? <><RefreshCcw size={12} /> Undo</> : 'Ignite'} </button> <button onClick={() => toggleArchive(t.id, t.archived)} style={{ flex: 1, padding: '8px', background: t.archived ? '#f1f5f9' : '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}> {t.archived ? 'Restore' : 'Archive'} </button> </div> </div> </div> ))} {getDisplayedThoughts().filter(t => !t.is_quote).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>{showArchives ? 'The vault is empty.' : 'No media fuel yet.'}</p>} </div> <div style={{ marginTop: '20px' }}> <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#d97706', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}><Trophy size={12} /> The Receipts (Crushed)</h3> <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}> {crushedHistory.filter(m => viewingGoal === 'all' ? true : m.goal_id === viewingGoal.id && m.user_id === session.user.id).map(m => ( <div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' }}> <div style={{ marginTop: '2px' }}><Flame size={14} color="#d97706" fill="#d97706" /></div> <div> <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 'bold', color: '#92400e' }}>{m.task}</p> {m.victory_note && <p style={{ margin: 0, fontSize: '13px', color: '#b45309', fontStyle: 'italic' }}>"{m.victory_note}"</p>} </div> </div> ))} {crushedHistory.filter(m => viewingGoal === 'all' ? true : m.goal_id === viewingGoal.id && m.user_id === session.user.id).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No wins recorded yet. Crush a goal tomorrow.</p>} </div> </div> </div> )}
             
-            {/* --- UPDATED ALLY TAB: SHOWS RECENT WINS ON MAIN SCREEN --- */}
+            {/* --- ALLY TAB (FIXED: SHOWS RECENT WINS) --- */}
             {activeTab === 'ally' && !viewingGoal && (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
                     <div style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
@@ -387,11 +418,11 @@ function VisionBoard({ session }) {
                         </div>
                     </div>
 
-                    {/* NEW: RECENT PARTNER VICTORIES ON MAIN DASHBOARD */}
+                    {/* NEW SECTION: PARTNER'S RECENT WINS */}
                     <div style={{ marginBottom: '20px' }}>
                         <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#d97706', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}><Trophy size={12} /> Recent Victories</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {crushedHistory.filter(m => m.user_id !== session.user.id).slice(0, 3).map(m => (
+                            {crushedHistory.filter(m => m.user_id !== session.user.id).slice(0, 5).map(m => (
                                 <div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' }}>
                                     <div style={{ marginTop: '2px' }}><Flame size={14} color="#d97706" fill="#d97706" /></div>
                                     <div>
@@ -400,7 +431,7 @@ function VisionBoard({ session }) {
                                     </div>
                                 </div>
                             ))}
-                            {crushedHistory.filter(m => m.user_id !== session.user.id).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No partner victories recorded yet.</p>}
+                            {crushedHistory.filter(m => m.user_id !== session.user.id).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No partner victories yet.</p>}
                         </div>
                     </div>
 
@@ -420,6 +451,7 @@ function VisionBoard({ session }) {
                 </div>
             )}
 
+            {/* ... (Ally Tab Viewing Goal Logic Same as Before) ... */}
             {activeTab === 'ally' && viewingGoal && (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
                     <button onClick={() => setViewingGoal(null)} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', color: '#64748b', fontSize: '14px', marginBottom: '15px', cursor: 'pointer' }}><ArrowLeft size={16} /> Back to Partner Folders</button>
@@ -441,8 +473,7 @@ function VisionBoard({ session }) {
                     <div style={{ marginTop: '20px' }}>
                         <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#d97706', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}><Trophy size={12} /> Partner's Wins</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {/* FIXED: Strict User ID Filter */}
-                            {crushedHistory.filter(m => viewingGoal === 'all' ? m.user_id !== session.user.id : m.goal_id === viewingGoal.id && m.user_id !== session.user.id).map(m => (
+                            {crushedHistory.filter(m => viewingGoal === 'all' ? true : m.goal_id === viewingGoal.id && m.user_id !== session.user.id).map(m => (
                                 <div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' }}>
                                     <div style={{ marginTop: '2px' }}><Flame size={14} color="#d97706" fill="#d97706" /></div>
                                     <div>
@@ -451,7 +482,7 @@ function VisionBoard({ session }) {
                                     </div>
                                 </div>
                             ))}
-                            {crushedHistory.filter(m => viewingGoal === 'all' ? m.user_id !== session.user.id : m.goal_id === viewingGoal.id && m.user_id !== session.user.id).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No partner wins yet.</p>}
+                            {crushedHistory.filter(m => viewingGoal === 'all' ? true : m.goal_id === viewingGoal.id && m.user_id !== session.user.id).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No partner wins yet.</p>}
                         </div>
                     </div>
                 </div>
