@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+\import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2, ShieldCheck, AlertCircle, Edit3, Fingerprint, GripVertical, History, Users, Link as LinkIcon, Check, XCircle, MessageCircle, Heart, Send, Unlock, Save } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -89,6 +89,9 @@ function VisionBoard({ session }) {
   const [cheerModal, setCheerModal] = useState({ isOpen: false, missionId: null });
   const [cheerInput, setCheerInput] = useState('');
   
+  // Draft State for Victory Notes (before confirming)
+  const [tempVictoryNotes, setTempVictoryNotes] = useState({});
+
   // Privacy States
   const [isPrivateGoal, setIsPrivateGoal] = useState(false); 
   const [isPrivateMission, setIsPrivateMission] = useState(false); 
@@ -137,7 +140,7 @@ function VisionBoard({ session }) {
   // INITIAL FETCH
   useEffect(() => { fetchAllData(); }, [session]);
 
-  const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
+  const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 4000); };
 
   // --- DATA FETCHING ---
   const fetchAllData = useCallback(async () => {
@@ -174,12 +177,23 @@ function VisionBoard({ session }) {
     const channel = supabase.channel('db-changes')
       .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
         fetchAllData(); 
+        
+        // --- CUSTOM NOTIFICATIONS ---
         if (payload.table === 'missions' && payload.eventType === 'UPDATE') {
-            if (payload.new.completed && !payload.old.completed && payload.new.user_id !== session.user.id) {
-               showNotification("Partner completed a mission!", "success");
+            const isMe = payload.new.user_id === session.user.id;
+            
+            // 1. Partner CRUSHED (Gold Alert)
+            if (!isMe && payload.new.crushed && !payload.old.crushed) {
+                showNotification(`🔥 PARTNER CRUSHED: "${payload.new.task}"`, 'crushed'); // Custom Type
             }
-            if (payload.new.cheer_note && payload.new.cheer_note !== payload.old.cheer_note && payload.new.user_id === session.user.id) {
-               showNotification(`Partner sent a boost: "${payload.new.cheer_note}"`);
+            // 2. Partner COMPLETED (Green Alert)
+            else if (!isMe && payload.new.completed && !payload.old.completed && !payload.new.crushed) {
+               showNotification(`Partner completed: "${payload.new.task}"`, 'success');
+            }
+            
+            // 3. Partner Sent Cheer
+            if (isMe && payload.new.cheer_note && payload.new.cheer_note !== payload.old.cheer_note) {
+               showNotification(`Partner sent a boost: "${payload.new.cheer_note}"`, 'cheer');
             }
         }
       })
@@ -234,11 +248,22 @@ function VisionBoard({ session }) {
   const toggleCompleted = async (mission) => { const newCompleted = !mission.completed; const updates = { completed: newCompleted, crushed: newCompleted ? mission.crushed : false }; const nextMissions = myMissions.map(m => m.id === mission.id ? { ...m, ...updates } : m); const allDone = nextMissions.length > 0 && nextMissions.every(m => m.completed || m.crushed); if (newCompleted && !mission.completed) { const goal = myGoals.find(g => g.id === mission.goal_id); const color = goal ? goal.color : '#cbd5e1'; if (allDone) { triggerGrandFinale(); } else { confetti({ particleCount: 30, spread: 40, origin: { y: 0.7 }, colors: [color], scalar: 0.8 }); } } const { error } = await supabase.from('missions').update(updates).eq('id', mission.id); if (!error) { setMyMissions(nextMissions); } };
   const toggleCrushed = async (mission) => { const newCrushed = !mission.crushed; const updates = { crushed: newCrushed, completed: newCrushed ? true : mission.completed }; const nextMissions = myMissions.map(m => m.id === mission.id ? { ...m, ...updates } : m); const allDone = nextMissions.length > 0 && nextMissions.every(m => m.completed || m.crushed); if (newCrushed) { if (allDone) { triggerGrandFinale(); } else { confetti({ particleCount: 100, spread: 70, origin: { y: 0.7 }, colors: ['#f59e0b', '#fbbf24', '#ffffff'], scalar: 1.2 }); } } const { error } = await supabase.from('missions').update(updates).eq('id', mission.id); if (!error) { setMyMissions(nextMissions); if(newCrushed) setCrushedHistory([ { ...mission, ...updates }, ...crushedHistory ]); else setCrushedHistory(crushedHistory.filter(m => m.id !== mission.id)); } };
   
-  const handleNoteChange = (id, newText) => { setMyMissions(myMissions.map(m => m.id === id ? { ...m, victory_note: newText } : m)); };
-  const handleNoteSave = async (id, newText) => { 
-      await supabase.from('missions').update({ victory_note: newText }).eq('id', id); 
-      setCrushedHistory(crushedHistory.map(m => m.id === id ? { ...m, victory_note: newText } : m)); 
-      showNotification("Victory Recorded.", "success");
+  // -- VICTORY NOTE LOGIC --
+  const handleDraftChange = (id, text) => {
+      setTempVictoryNotes({ ...tempVictoryNotes, [id]: text });
+  };
+
+  const handleNoteSave = async (id) => { 
+      const note = tempVictoryNotes[id];
+      if (!note || !note.trim()) return;
+      
+      const { error } = await supabase.from('missions').update({ victory_note: note }).eq('id', id);
+      if (!error) {
+          // Update local state to reflect the saved note (hiding the input)
+          setMyMissions(myMissions.map(m => m.id === id ? { ...m, victory_note: note } : m));
+          setCrushedHistory(crushedHistory.map(m => m.id === id ? { ...m, victory_note: note } : m)); 
+          showNotification("Victory Locked In.", "success");
+      }
   };
 
   const deleteMission = async (id) => { const { error } = await supabase.from('missions').delete().eq('id', id); if (!error) setMyMissions(myMissions.filter(m => m.id !== id)); };
@@ -269,7 +294,7 @@ function VisionBoard({ session }) {
     <div style={mode === 'night' ? nightStyle : morningStyle}>
        <style>{globalStyles}</style>
        <div ref={fireworksRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, pointerEvents: 'none' }}></div>
-       {notification && ( <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 20000, background: notification.type === 'error' ? '#ef4444' : (notification.type === 'success' ? '#10b981' : '#3b82f6'), padding: '12px 24px', borderRadius: '30px', color: 'white', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', animation: 'fadeIn 0.3s' }}> {notification.msg} </div> )}
+       {notification && ( <div style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 20000, background: notification.type === 'crushed' ? '#f59e0b' : (notification.type === 'error' ? '#ef4444' : '#10b981'), padding: '12px 24px', borderRadius: '30px', color: 'white', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', animation: 'fadeIn 0.3s' }}> {notification.msg} </div> )}
         {deleteModal.isOpen && ( <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}> <div style={{ background: '#1e293b', padding: '24px', borderRadius: '24px', width: '85%', maxWidth: '300px', textAlign: 'center', border: '1px solid #334155', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}> <h3 style={{ margin: '0 0 16px 0', color: 'white', fontSize: '18px' }}>{deleteModal.title}</h3> <div style={{ display: 'flex', gap: '10px' }}> <button onClick={() => setDeleteModal({ isOpen: false, type: null, id: null, title: '' })} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button> <button onClick={executeDelete} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: '#ef4444', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>Delete</button> </div> </div> </div> )}
         {protocolModal && ( <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.9)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}> <div style={{ background: '#1e293b', padding: '30px', borderRadius: '24px', width: '90%', maxWidth: '340px', textAlign: 'center', border: '2px solid #a855f7', boxShadow: '0 0 40px rgba(168, 85, 247, 0.3)' }}> <Fingerprint size={48} color="#c084fc" style={{ marginBottom: '20px' }} /> <h3 style={{ margin: '0 0 10px 0', color: 'white', fontSize: '22px', fontWeight: '900', textTransform: 'uppercase' }}>Contract With Tomorrow</h3> <p style={{ margin: '0 0 25px 0', color: '#cbd5e1', fontSize: '15px', lineHeight: '1.5' }}> "Does this plan demand your absolute best, or are you negotiating with weakness? Once you execute, there are no edits. Only results." </p> <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}> <button onClick={executeProtocol} style={{ width: '100%', padding: '16px', borderRadius: '16px', border: 'none', background: 'linear-gradient(to right, #c084fc, #a855f7)', color: 'white', fontWeight: '900', fontSize: '16px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '1px' }}> EXECUTE PROTOCOL </button> <button onClick={() => setProtocolModal(false)} style={{ width: '100%', padding: '12px', borderRadius: '16px', border: 'none', background: 'transparent', color: '#64748b', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}> ABORT </button> </div> </div> </div> )}
         {cheerModal.isOpen && ( <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}> <div style={{ background: '#1e293b', padding: '30px', borderRadius: '24px', width: '90%', maxWidth: '340px', textAlign: 'center', border: '2px solid #16a34a', boxShadow: '0 0 40px rgba(22, 163, 74, 0.3)' }}> <MessageCircle size={48} color="#22c55e" style={{ marginBottom: '20px' }} /> <h3 style={{ margin: '0 0 10px 0', color: 'white', fontSize: '20px', fontWeight: 'bold' }}>Send a Boost</h3> <input type="text" placeholder="Keep pushing..." value={cheerInput} onChange={(e) => setCheerInput(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '12px', background: '#0f172a', border: '1px solid #334155', color: 'white', marginBottom: '20px', outline: 'none', textAlign: 'center' }} /> <div style={{ display: 'flex', gap: '10px' }}> <button onClick={() => setCheerModal({ isOpen: false, missionId: null })} style={{ flex: 1, padding: '12px', borderRadius: '16px', border: 'none', background: 'transparent', color: '#64748b', fontWeight: 'bold', cursor: 'pointer' }}>Cancel</button> <button onClick={submitCheer} style={{ flex: 1, padding: '12px', borderRadius: '16px', border: 'none', background: '#16a34a', color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>Send <Send size={14}/></button> </div> </div> </div> )}
@@ -375,7 +400,22 @@ function VisionBoard({ session }) {
             {/* --- MISSION TAB --- */}
             {activeTab === 'mission' && ( <div style={{ animation: 'fadeIn 0.3s' }}> {randomQuote && ( <div style={{ padding: '20px', background: 'white', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px', textAlign: 'center' }}> <QuoteIcon size={24} color="#cbd5e1" style={{ marginBottom: '10px' }} /> <p style={{ margin: 0, fontSize: '18px', fontStyle: 'italic', fontWeight: '600', color: '#334155', lineHeight: '1.5' }}>"{randomQuote.text}"</p> </div> )} <div style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}> <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#0f172a', fontWeight: '800', fontSize: '18px' }}> <ListTodo size={22} color="#3b82f6" /> Mission Log </div> {myMissions.length === 0 && ( <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: '16px', background: '#f8fafc' }}> <AlertCircle size={48} color="#cbd5e1" style={{ marginBottom: '10px' }} /> <p style={{ margin: 0, fontWeight: 'bold', color: '#64748b' }}>Protocol Empty.</p> <p style={{ margin: '5px 0 0 0', fontSize: '14px' }}>Log out or switch to Night Mode to assign objectives.</p> <button onClick={() => setMode('night')} style={{ marginTop: '15px', padding: '8px 16px', background: '#334155', color: 'white', border: 'none', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}> <Moon size={10} style={{ marginRight: '5px' }} /> Return to Night Mode </button> </div> )} <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}> {myMissions.map(m => ( <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '12px', background: m.crushed ? '#fff7ed' : (m.completed ? '#f0fdf4' : '#f8fafc'), borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: m.crushed ? '1px solid #fdba74' : (m.completed ? '1px solid #bbf7d0' : '1px solid #e2e8f0'), borderLeftWidth: '4px', transition: 'all 0.2s' }}> <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}> <div onClick={() => toggleCompleted(m)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}> <div style={{ minWidth: '24px', height: '24px', borderRadius: '8px', border: m.completed ? 'none' : '2px solid #cbd5e1', background: m.completed ? getGoalColor(m.goal_id) : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}> {m.completed && <CheckSquare size={16} color="white" />} </div> <div style={{ display: 'flex', flexDirection: 'column' }}> <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)} {m.is_private && <Lock size={8} />}</span> <span style={{ textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? (m.crushed ? '#d97706' : '#86efac') : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span> </div> </div> <button onClick={() => toggleCrushed(m)} style={{ background: m.crushed ? '#f59e0b' : 'transparent', border: m.crushed ? 'none' : '1px solid #e2e8f0', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}> <Flame size={16} color={m.crushed ? 'white' : '#cbd5e1'} fill={m.crushed ? 'white' : 'transparent'} /> </button> </div> {m.cheer_note && (<div style={{ marginTop: '5px', fontSize: '12px', color: '#60a5fa', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}><MessageCircle size={12} /> Partner: "{m.cheer_note}"</div>)} 
             
-            {m.crushed && ( <div style={{ marginTop: '10px', animation: 'fadeIn 0.5s', display: 'flex', gap: '8px' }}> <input type="text" placeholder="How did you crush it?" value={m.victory_note || ''} onChange={(e) => handleNoteChange(m.id, e.target.value)} style={{ flex: 1, padding: '10px', fontSize: '14px', border: '1px solid #fed7aa', borderRadius: '12px', background: '#fff', color: '#c2410c', outline: 'none' }} /> <button onClick={() => handleNoteSave(m.id, m.victory_note)} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '0 16px', borderRadius: '12px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>CONFIRM</button> </div> )} </div> ))} </div> </div> </div> )}
+            {/* -- CRUSHED UI: SHOW TEXT IF EXISTS, ELSE SHOW INPUT -- */}
+            {m.crushed && ( 
+                <div style={{ marginTop: '10px', animation: 'fadeIn 0.5s' }}> 
+                    {m.victory_note ? (
+                        <div style={{ color: '#c2410c', fontWeight: 'bold', fontSize: '14px', background: '#ffedd5', padding: '10px', borderRadius: '8px', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Trophy size={14} /> <span>{m.victory_note}</span>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', gap: '8px' }}> 
+                            <input type="text" placeholder="How did you crush it?" value={tempVictoryNotes[m.id] || ''} onChange={(e) => handleDraftChange(m.id, e.target.value)} style={{ flex: 1, padding: '10px', fontSize: '14px', border: '1px solid #fed7aa', borderRadius: '12px', background: '#fff', color: '#c2410c', outline: 'none' }} /> 
+                            <button onClick={() => handleNoteSave(m.id)} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '0 16px', borderRadius: '12px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>CONFIRM</button> 
+                        </div> 
+                    )}
+                </div> 
+            )} 
+            </div> ))} </div> </div> </div> )}
 
             {/* ... (Vision Tab Same as Before) ... */}
             {activeTab === 'vision' && !viewingGoal && ( <div style={{ animation: 'fadeIn 0.3s', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}> <div onClick={() => setViewingGoal('all')} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}> <div style={{ background: '#f1f5f9', padding: '15px', borderRadius: '50%' }}><Archive size={24} color="#64748b" /></div> <span style={{ fontWeight: 'bold', color: '#334155' }}>All Visions</span> </div> {myGoals.map(g => ( <div key={g.id} onClick={() => setViewingGoal(g)} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', borderTop: `4px solid ${g.color}`, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}> <div style={{ background: `${g.color}20`, padding: '15px', borderRadius: '50%' }}><Target size={24} color={g.color} /></div> <span style={{ fontWeight: 'bold', color: '#334155', textAlign: 'center' }}>{g.title}</span> {g.is_private && <Lock size={12} color="#94a3b8" style={{ marginTop: '5px' }} />} <span style={{ fontSize: '10px', color: '#94a3b8' }}>{myThoughts.filter(t => t.goal_id === g.id).length} Items</span> </div> ))} {myGoals.length === 0 && <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '14px' }}>No goals created yet. Use Night Mode to add goals.</div>} </div> )}
@@ -395,16 +435,17 @@ function VisionBoard({ session }) {
                         )}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {partnerMissions.map(m => (
-                                <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '12px', background: m.completed ? '#f0fdf4' : '#f8fafc', borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: '1px solid #e2e8f0', borderLeftWidth: '4px', opacity: m.completed ? 0.7 : 1 }}>
+                                <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '12px', background: m.crushed ? '#fff7ed' : (m.completed ? '#f0fdf4' : '#f8fafc'), borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: m.crushed ? '1px solid #fdba74' : '1px solid #e2e8f0', borderLeftWidth: '4px', opacity: m.completed && !m.crushed ? 0.7 : 1 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                                             <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)}</span>
-                                            <span style={{ color: m.completed ? '#16a34a' : '#334155', fontWeight: '600', fontSize: '16px', textDecoration: m.completed ? 'line-through' : 'none' }}>{m.task}</span>
+                                            <span style={{ color: m.completed ? '#16a34a' : '#334155', fontWeight: '600', fontSize: '16px', textDecoration: m.completed && !m.crushed ? 'line-through' : 'none' }}>{m.task}</span>
                                         </div>
                                         <button onClick={() => openCheerModal(m.id)} style={{ background: m.cheer_note ? '#f0fdf4' : 'white', border: '1px solid #cbd5e1', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                                             <MessageCircle size={16} color={m.cheer_note ? '#16a34a' : '#94a3b8'} />
                                         </button>
                                     </div>
+                                    {m.crushed && m.victory_note && ( <div style={{ marginTop: '5px', fontSize: '13px', color: '#c2410c', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px', background: '#fffbeb', padding: '6px', borderRadius: '8px' }}> <Trophy size={12} color="#f59e0b" /> "{m.victory_note}" </div> )}
                                     {m.cheer_note && ( <div style={{ marginTop: '5px', fontSize: '12px', color: '#16a34a', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}> <Heart size={12} fill="currentColor" /> You: "{m.cheer_note}" </div> )}
                                 </div>
                             ))}
@@ -444,7 +485,6 @@ function VisionBoard({ session }) {
                 </div>
             )}
 
-            {/* ... (Ally Tab Viewing Goal Logic Same as Before) ... */}
             {activeTab === 'ally' && viewingGoal && (
                 <div style={{ animation: 'fadeIn 0.3s' }}>
                     <button onClick={() => setViewingGoal(null)} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', color: '#64748b', fontSize: '14px', marginBottom: '15px', cursor: 'pointer' }}><ArrowLeft size={16} /> Back to Partner Folders</button>
