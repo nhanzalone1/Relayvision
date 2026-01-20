@@ -13,6 +13,15 @@ const globalStyles = `
   -webkit-tap-highlight-color: transparent;
 `;
 
+// --- DOG SILHOUETTE ICON (The Tribute Fallback) ---
+const DogIcon = ({ size = 42, color = "currentColor" }) => (
+  <div style={{ width: size, height: size, borderRadius: '50%', background: 'black', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fbbf24', boxShadow: '0 0 10px rgba(251, 191, 36, 0.5)', overflow: 'hidden' }}>
+    <svg width="60%" height="60%" viewBox="0 0 24 24" fill="#fbbf24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M4 14C4 14 5 13 6 13C7 13 8 14 8 14C8 14 8.5 11 11 9C13.5 7 17 6 17 6L19 4L21 6C21 6 20 8 19 9C18 10 17 10 17 10L18 13L16 16L14 16C14 16 12 19 10 19C8 19 6 18 6 18L4 14Z" stroke="none" />
+    </svg>
+  </div>
+);
+
 // --- AUTH COMPONENT ---
 function Auth({ onLogin }) {
   const [loading, setLoading] = useState(false);
@@ -93,6 +102,7 @@ function VisionBoard({ session }) {
   
   // MENU STATE
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [imageError, setImageError] = useState(false); 
   const menuRef = useRef(null);
   
   const [tempVictoryNotes, setTempVictoryNotes] = useState({});
@@ -136,7 +146,6 @@ function VisionBoard({ session }) {
     let lastTouchEnd = 0;
     const preventDoubleTap = (e) => { const now = (new Date()).getTime(); if (now - lastTouchEnd <= 300) { e.preventDefault(); } lastTouchEnd = now; };
     document.addEventListener('touchend', preventDoubleTap, { passive: false });
-    // Click outside to close menu
     const handleClickOutside = (event) => { if (menuRef.current && !menuRef.current.contains(event.target)) setShowProfileMenu(false); };
     document.addEventListener("mousedown", handleClickOutside);
     return () => { 
@@ -216,10 +225,10 @@ function VisionBoard({ session }) {
           setCurrentProfile({ ...currentProfile, avatar_url: publicUrl });
           showNotification("Profile Picture Updated!", "success");
           setShowProfileMenu(false);
+          setImageError(false); 
       } catch (error) { showNotification(error.message, "error"); } finally { setUploading(false); }
   };
 
-  // --- HISTORY CALENDAR LOGIC ---
   const getHistoryDays = () => {
       const grouped = {};
       historyData.forEach(m => {
@@ -240,7 +249,6 @@ function VisionBoard({ session }) {
       return days;
   };
 
-  // ... (Standard Logic Blocks) ...
   const sendInvite = async () => { if(!partnerEmail) return; const { error } = await supabase.rpc('send_ally_invite', { target_email: partnerEmail }); if (error) { showNotification(error.message, "error"); } else { showNotification("Invite Sent.", "success"); fetchProfile(); } };
   const acceptInvite = async () => { const { error } = await supabase.rpc('confirm_alliance'); if (!error) { showNotification("Alliance Established.", "success"); confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 }, colors: ['#60a5fa', '#ffffff'] }); fetchProfile(); fetchAllData(); } };
   const declineInvite = async () => { const { error } = await supabase.rpc('sever_connection'); if (!error) { showNotification("Connection Severed.", "neutral"); fetchProfile(); } };
@@ -319,10 +327,20 @@ function VisionBoard({ session }) {
           <div style={{ position: 'relative' }} ref={menuRef}>
               <input type="file" ref={avatarInputRef} onChange={handleAvatarUpload} accept="image/*" style={{ display: 'none' }} />
               <button onClick={() => setShowProfileMenu(!showProfileMenu)} style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}> 
-                  <img 
-                    src={currentProfile?.avatar_url || '/tribute.png'} 
-                    style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', border: currentProfile?.avatar_url ? `2px solid ${mode === 'night' ? '#333' : '#cbd5e1'}` : '2px solid #fbbf24', boxShadow: currentProfile?.avatar_url ? 'none' : '0 0 10px rgba(251, 191, 36, 0.5)' }} 
-                  />
+                  {currentProfile?.avatar_url && !imageError ? (
+                      <img 
+                        src={currentProfile.avatar_url} 
+                        onError={() => setImageError(true)}
+                        style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', border: `2px solid ${mode === 'night' ? '#333' : '#cbd5e1'}` }} 
+                      />
+                  ) : (
+                      // FAILSAFE TRIBUTE: Used if no image OR if image fails to load
+                      <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'black', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fbbf24', boxShadow: '0 0 10px rgba(251, 191, 36, 0.5)', overflow: 'hidden' }}>
+                        <img src="/tribute.png" onError={(e) => { e.target.style.display='none'; setImageError(true); }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {/* If tribute.png fails, show SVG icon */}
+                        {imageError && <DogIcon size={42} />}
+                      </div>
+                  )}
               </button>
               
               {/* PROFILE DROPDOWN MENU */}
