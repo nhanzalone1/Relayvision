@@ -92,7 +92,7 @@ function VisionBoard({ session }) {
   const [cheerModal, setCheerModal] = useState({ isOpen: false, missionId: null });
   const [cheerInput, setCheerInput] = useState('');
   const [historyModal, setHistoryModal] = useState(false);
-  const [showGuide, setShowGuide] = useState(false); // --- ADDED: GUIDE STATE ---
+  const [showGuide, setShowGuide] = useState(false);
   const [historyData, setHistoryData] = useState([]);
   
   // MENU STATE
@@ -308,32 +308,68 @@ function VisionBoard({ session }) {
            </div>
        )}
 
-       {/* --- SYSTEM MANUAL / GUIDE MODAL --- */}
+      {/* --- CONTEXT-AWARE SYSTEM MANUAL --- */}
       {showGuide && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.9)', zIndex: 20000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
           <div style={{ background: '#1e293b', padding: '30px', borderRadius: '24px', width: '90%', maxWidth: '340px', border: '1px solid #475569', color: 'white' }}>
+            
+            {/* HEADER */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <HelpCircle size={24} color="#3b82f6" /> SYSTEM MANUAL
+              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', color: mode === 'night' ? '#c084fc' : '#f59e0b' }}>
+                <HelpCircle size={24} /> {mode === 'night' ? 'NIGHT OPS: STRATEGY' : 'DAY OPS: EXECUTION'}
               </h3>
               <button onClick={() => setShowGuide(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}><X size={24} /></button>
             </div>
             
-            <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #334155' }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#c084fc', display: 'flex', alignItems: 'center', gap: '8px' }}><Moon size={16} /> NIGHT MODE = VISION</h4>
-              <p style={{ margin: 0, fontSize: '14px', color: '#cbd5e1', lineHeight: '1.5' }}>
-                The <b>Strategy</b>. Use this to set high-level goals (e.g., "Build Business") and upload media/quotes ("Fuel") that remind you <i>why</i> you started.
-              </p>
-            </div>
+            {/* NIGHT MODE CONTENT */}
+            {mode === 'night' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '25px' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 5px 0', color: 'white', fontSize: '16px' }}>1. Capture Vision</h4>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#cbd5e1', lineHeight: '1.4' }}>
+                    Upload images or video ("Fuel") to remind you <i>why</i> you grind. Use the <Lock size={10}/> icon to keep visions Private, or unlock to share with your Ally.
+                  </p>
+                </div>
+                <div>
+                  <h4 style={{ margin: '0 0 5px 0', color: 'white', fontSize: '16px' }}>2. Set The Mission</h4>
+                  <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#cbd5e1', lineHeight: '1.4' }}>
+                    Pre-load tomorrow's targets. Be specific.
+                  </p>
+                  <div style={{ background: '#0f172a', padding: '10px', borderRadius: '8px', border: '1px solid #334155', fontSize: '12px', color: '#a855f7', fontStyle: 'italic' }}>
+                    <ShieldCheck size={12} style={{ marginRight: '5px', verticalAlign: 'middle' }}/> 
+                    "Initiate Protocol" locks the list. No edits allowed after that.
+                  </div>
+                </div>
+              </div>
+            )}
 
-            <div style={{ marginBottom: '25px' }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '8px' }}><Sun size={16} /> MORNING MODE = MISSION</h4>
-              <p style={{ margin: 0, fontSize: '14px', color: '#cbd5e1', lineHeight: '1.5' }}>
-                The <b>Execution</b>. These are temporary, 24-hour tasks that move you closer to your Vision. If you crush them today, you win the day.
-              </p>
-            </div>
+            {/* MORNING MODE CONTENT */}
+            {mode === 'morning' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '25px' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 5px 0', color: 'white', fontSize: '16px' }}>1. The Standard</h4>
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '5px' }}>
+                     <div style={{ flex: 1, background: '#f0fdf4', padding: '8px', borderRadius: '8px', color: '#166534', fontSize: '11px', fontWeight: 'bold', textAlign: 'center' }}>
+                        <CheckSquare size={14} style={{ display: 'block', margin: '0 auto 4px auto' }} /> COMPLETE
+                     </div>
+                     <div style={{ flex: 1, background: '#fffbeb', padding: '8px', borderRadius: '8px', color: '#b45309', fontSize: '11px', fontWeight: 'bold', textAlign: 'center', border: '1px solid #fcd34d' }}>
+                        <Flame size={14} style={{ display: 'block', margin: '0 auto 4px auto' }} /> CRUSHED
+                     </div>
+                  </div>
+                  <p style={{ margin: '8px 0 0 0', fontSize: '13px', color: '#cbd5e1', lineHeight: '1.4' }}>
+                    Use "Crushed" when you exceed expectations. You will be asked to leave a "Victory Note" as proof.
+                  </p>
+                </div>
+                <div>
+                  <h4 style={{ margin: '0 0 5px 0', color: 'white', fontSize: '16px' }}>2. Recruit an Ally</h4>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#cbd5e1', lineHeight: '1.4' }}>
+                    Go to the <b>Ally Tab</b> <Users size={12} /> to invite a partner via email. Once linked, you can see their Missions and send "Boosts" to keep them accountable.
+                  </p>
+                </div>
+              </div>
+            )}
 
-            <button onClick={() => setShowGuide(false)} style={{ width: '100%', padding: '14px', borderRadius: '16px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>
+            <button onClick={() => setShowGuide(false)} style={{ width: '100%', padding: '14px', borderRadius: '16px', border: 'none', background: mode === 'night' ? '#c084fc' : '#3b82f6', color: 'white', fontWeight: 'bold', cursor: 'pointer' }}>
               UNDERSTOOD
             </button>
           </div>
