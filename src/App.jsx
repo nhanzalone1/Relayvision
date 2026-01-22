@@ -554,7 +554,7 @@ function VisionBoard({ session }) {
            {activeTab === 'mission' && ( 
              <div style={{ animation: 'fadeIn 0.3s' }}> 
                
-               {/* --- ACTIVE MISSION DASHBOARD --- */}
+               {/* --- ACTIVE MISSION DASHBOARD (GRID) --- */}
                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#0f172a', fontWeight: '800', fontSize: '18px' }}> 
                   <ListTodo size={22} color="#3b82f6" /> Mission Dashboard 
                </div> 
@@ -568,33 +568,40 @@ function VisionBoard({ session }) {
                  </div> 
                )}
                
-               {/* ACTIVE CARDS STACK */}
-               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}> 
+               {/* THE COMMAND GRID */}
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}> 
                   {activeMissions.map(m => ( 
-                    <div key={m.id} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div key={m.id} style={{ 
+                        background: getGoalColor(m.goal_id), 
+                        borderRadius: '20px', 
+                        padding: '16px', 
+                        minHeight: '140px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+                        position: 'relative'
+                    }}>
+                        {/* TEXT AREA */}
+                        <div>
+                             <p style={{ margin: '0 0 10px 0', color: 'white', fontWeight: 'bold', fontSize: '16px', lineHeight: '1.4', textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>
+                                {m.task}
+                             </p>
+                             {m.is_private && <Lock size={12} color="rgba(255,255,255,0.7)" />}
+                        </div>
                         
-                        {/* CARD HEADER: GOAL & TEXT */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                             <div style={{ flex: 1 }}>
-                                 <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: 'white', letterSpacing: '0.5px', background: getGoalColor(m.goal_id), padding: '4px 8px', borderRadius: '10px' }}>
-                                    {getGoalTitle(m.goal_id)} {m.is_private && <Lock size={8} style={{marginLeft: '4px'}} />}
-                                 </span>
-                                 <p style={{ margin: '10px 0 0 0', color: '#1e293b', fontWeight: '600', fontSize: '18px', lineHeight: '1.4' }}>
-                                    {m.task}
-                                 </p>
-                             </div>
-                             {m.cheer_note && (<div style={{ fontSize: '20px' }}> ❤️ </div>)}
-                        </div>
-
-                        {/* CARD ACTIONS: THE CONTROLS */}
-                        <div style={{ display: 'flex', gap: '10px', paddingTop: '15px', borderTop: '1px solid #f1f5f9' }}>
-                             <button onClick={() => toggleCompleted(m)} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: '#f1f5f9', color: '#334155', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                                <CheckSquare size={18} /> Complete
+                        {/* ACTION AREA (GLASS BUTTONS) */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
+                             <button onClick={() => toggleCompleted(m)} style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+                                <CheckSquare size={16} />
                              </button>
-                             <button onClick={() => toggleCrushed(m)} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: '#fff7ed', color: '#d97706', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                                <Flame size={18} /> Crush It
+                             <button onClick={() => toggleCrushed(m)} style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+                                <Flame size={16} fill="white" />
                              </button>
                         </div>
+                        
+                        {/* PARTNER INDICATOR */}
+                        {m.cheer_note && <div style={{ position: 'absolute', top: '10px', right: '10px', fontSize: '16px' }}>❤️</div>}
                     </div> 
                   ))} 
                </div> 
