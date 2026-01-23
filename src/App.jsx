@@ -95,8 +95,9 @@ function VisionBoard({ session }) {
   const [showGuide, setShowGuide] = useState(false);
   const [historyData, setHistoryData] = useState([]);
   
-  // --- NEW STATE: ZONE MODAL (THE SPOKE) ---
-  const [activeZone, setActiveZone] = useState(null); // If set, shows the drill-down modal
+  // --- NEW STATE: ZONE MODAL (THE SPOKE) & TABS ---
+  const [activeZone, setActiveZone] = useState(null); 
+  const [modalTab, setModalTab] = useState('mission'); // 'mission' or 'vision'
 
   // MENU STATE
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -342,19 +343,19 @@ function VisionBoard({ session }) {
                 <div>
                   <h4 style={{ margin: '0 0 5px 0', color: 'white', fontSize: '16px' }}>1. The War Room</h4>
                   <p style={{ margin: 0, fontSize: '13px', color: '#cbd5e1', lineHeight: '1.4' }}>
-                    This is your strategic hub. Tap a <b>Zone Tile</b> (like "Fitness" or "General") to open its planning module.
+                    This is your strategic hub. Tap a <b>Zone Tile</b> to open its planning sheet.
                   </p>
                 </div>
                 <div>
-                  <h4 style={{ margin: '0 0 5px 0', color: 'white', fontSize: '16px' }}>2. Light Up The Board</h4>
+                  <h4 style={{ margin: '0 0 5px 0', color: 'white', fontSize: '16px' }}>2. Mission vs Vision</h4>
                   <p style={{ margin: 0, fontSize: '13px', color: '#cbd5e1', lineHeight: '1.4' }}>
-                    Zones are dim by default. Add a mission to a zone to "light it up." Your goal is to light up all critical zones before sleeping.
+                    Inside the sheet, toggle between <b>MISSION</b> (daily tasks) and <b>VISION</b> (uploads & goals).
                   </p>
                 </div>
                 <div>
                   <h4 style={{ margin: '0 0 5px 0', color: 'white', fontSize: '16px' }}>3. Initiate Protocol</h4>
                   <p style={{ margin: 0, fontSize: '13px', color: '#cbd5e1', lineHeight: '1.4' }}>
-                    Once your zones are ready, hit the big purple button at the bottom. This locks your missions for tomorrow.
+                    Once your zones are ready (lit up), hit the big purple button to lock in tomorrow.
                   </p>
                 </div>
               </div>
@@ -494,7 +495,7 @@ function VisionBoard({ session }) {
              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                  
                  {/* GENERAL TILE */}
-                 <div onClick={() => { setSelectedGoalId(null); setActiveZone({id: null, title: 'General', color: '#333'}); }} style={{ 
+                 <div onClick={() => { setSelectedGoalId(null); setActiveZone({id: null, title: 'General', color: '#666'}); setModalTab('mission'); }} style={{ 
                      background: '#1a1a1a', 
                      border: getZoneStats(null).lit ? '2px solid #fff' : '1px solid #333',
                      borderRadius: '24px', 
@@ -517,7 +518,7 @@ function VisionBoard({ session }) {
 
                  {/* USER ZONES */}
                  {myGoals.map(g => (
-                     <div key={g.id} onClick={() => { setSelectedGoalId(g.id); setActiveZone(g); }} style={{ 
+                     <div key={g.id} onClick={() => { setSelectedGoalId(g.id); setActiveZone(g); setModalTab('mission'); }} style={{ 
                          background: getZoneStats(g.id).lit ? g.color : '#1a1a1a', 
                          border: getZoneStats(g.id).lit ? `2px solid ${g.color}` : `1px solid ${g.color}44`,
                          borderRadius: '24px', 
@@ -582,64 +583,85 @@ function VisionBoard({ session }) {
                  </div>
              )} 
              
-             {/* THE SPOKE: ZONE DRILL-DOWN MODAL */}
+             {/* THE SPOKE: GLASS SHEET MODAL */}
              {activeZone && (
-                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#000', zIndex: 11000, display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.2s' }}>
-                     {/* MODAL HEADER */}
-                     <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${activeZone.color}44` }}>
-                         <h2 style={{ margin: 0, fontSize: '24px', color: activeZone.color, textTransform: 'uppercase', letterSpacing: '1px' }}>{activeZone.title}</h2>
-                         <button onClick={() => setActiveZone(null)} style={{ padding: '8px 16px', background: activeZone.color, color: 'white', border: 'none', borderRadius: '20px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>ZONE READY</button>
-                     </div>
-
-                     {/* MODAL CONTENT: SCROLLABLE */}
-                     <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '25px' }}>
+                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 11000 }}>
+                     <div style={{ 
+                         position: 'absolute', 
+                         bottom: 0, 
+                         left: 0, 
+                         width: '100%', 
+                         height: '90%', 
+                         background: 'rgba(18, 18, 18, 0.95)', 
+                         backdropFilter: 'blur(20px)',
+                         borderRadius: '30px 30px 0 0',
+                         borderTop: `1px solid ${activeZone.color}44`,
+                         display: 'flex', 
+                         flexDirection: 'column', 
+                         animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)' 
+                     }}>
                          
-                         {/* 1. ADD MISSION INPUT */}
-                         <div style={{ display: 'flex', gap: '10px' }}> 
-                             <input type="text" value={missionInput} onChange={(e) => setMissionInput(e.target.value)} placeholder={`Add mission for ${activeZone.title}...`} onKeyDown={(e) => e.key === 'Enter' && addMission()} autoFocus style={{ flex: 1, padding: '16px', borderRadius: '16px', background: '#111', border: '1px solid #333', borderLeft: `4px solid ${activeZone.color}`, color: 'white', outline: 'none', fontSize: '16px' }} /> 
-                             <button onClick={() => addMission()} style={{ background: '#333', border: 'none', borderRadius: '16px', width: '50px', color: 'white', cursor: 'pointer' }}><Plus size={24} /></button> 
+                         {/* SHEET HEADER */}
+                         <div style={{ padding: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <h2 style={{ margin: 0, fontSize: '28px', color: activeZone.color, textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '900' }}>{activeZone.title}</h2>
+                             <button onClick={() => setActiveZone(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18}/></button>
                          </div>
 
-                         {/* 2. ACTIVE MISSION LIST */}
-                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                             {activeMissions.filter(m => m.goal_id === activeZone.id).map(m => (
-                                 <div key={m.id} style={{ background: '#1a1a1a', padding: '16px', borderRadius: '16px', border: '1px solid #333', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: activeZone.color }}></div> 
-                                     <span style={{ fontSize: '16px', color: '#ddd', flex: 1 }}>{m.task}</span> 
-                                     <button onClick={() => deleteMission(m.id)} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer' }}><X size={18} /></button> 
-                                 </div>
-                             ))}
-                             {activeMissions.filter(m => m.goal_id === activeZone.id).length === 0 && (
-                                 <div style={{ textAlign: 'center', color: '#444', padding: '20px', border: '1px dashed #333', borderRadius: '16px' }}>No missions yet.</div>
-                             )}
+                         {/* TOGGLE SWITCH */}
+                         <div style={{ padding: '0 25px 20px 25px' }}>
+                             <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '16px', padding: '4px' }}>
+                                 <button onClick={() => setModalTab('mission')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: modalTab === 'mission' ? activeZone.color : 'transparent', color: 'white', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }}>MISSION</button>
+                                 <button onClick={() => setModalTab('vision')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: modalTab === 'vision' ? activeZone.color : 'transparent', color: 'white', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }}>VISION</button>
+                             </div>
                          </div>
 
-                         {/* 3. CAPTURE VISION (COMPACT) */}
-                         <div style={{ borderTop: '1px solid #222', paddingTop: '25px', marginTop: '10px' }}>
-                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                                 <Camera size={16} color="#666" />
-                                 <span style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>ATTACH VISION TO THIS ZONE</span>
-                             </div>
+                         {/* CONTENT AREA */}
+                         <div style={{ flex: 1, overflowY: 'auto', padding: '0 25px 40px 25px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                              
-                             <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-                                 <button onClick={() => fileInputRef.current.click()} style={{ flex: 1, padding: '12px', background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', color: '#ddd', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}><ImageIcon size={14}/> Photo</button>
-                                 <button onClick={() => setIsPrivateVision(!isPrivateVision)} style={{ flex: 1, padding: '12px', background: '#1a1a1a', border: isPrivateVision ? '1px solid #ef4444' : '1px solid #333', borderRadius: '12px', color: isPrivateVision ? '#ef4444' : '#666', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>{isPrivateVision ? <Lock size={14}/> : <Unlock size={14}/>} {isPrivateVision ? 'Private' : 'Shared'}</button>
-                             </div>
-                             
-                             {(previewUrl) && (
-                                 <div style={{ width: '100%', height: '150px', background: '#111', borderRadius: '16px', overflow: 'hidden', marginBottom: '15px', position: 'relative' }}>
-                                     <img src={previewUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                     <button onClick={clearMedia} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', color: 'white', border: 'none', borderRadius: '50%', width: '30px', height: '30px' }}>X</button>
-                                 </div>
+                             {modalTab === 'mission' && (
+                                 <>
+                                     <div style={{ display: 'flex', gap: '10px' }}> 
+                                         <input type="text" value={missionInput} onChange={(e) => setMissionInput(e.target.value)} placeholder="Add specific task..." onKeyDown={(e) => e.key === 'Enter' && addMission()} autoFocus style={{ flex: 1, padding: '16px', borderRadius: '16px', background: '#000', border: '1px solid #333', color: 'white', outline: 'none', fontSize: '16px' }} /> 
+                                         <button onClick={() => addMission()} style={{ background: '#333', border: 'none', borderRadius: '16px', width: '50px', color: 'white', cursor: 'pointer' }}><Plus size={24} /></button> 
+                                     </div>
+                                     
+                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                         {activeMissions.filter(m => m.goal_id === activeZone.id).map(m => (
+                                             <div key={m.id} style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '16px', border: '1px solid #333', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: activeZone.color }}></div> 
+                                                 <span style={{ fontSize: '16px', color: '#ddd', flex: 1 }}>{m.task}</span> 
+                                                 <button onClick={() => deleteMission(m.id)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}><X size={18} /></button> 
+                                             </div>
+                                         ))}
+                                         {activeMissions.filter(m => m.goal_id === activeZone.id).length === 0 && (
+                                             <div style={{ textAlign: 'center', color: '#666', padding: '30px', border: '1px dashed #333', borderRadius: '16px', fontSize: '14px' }}>List is empty for tomorrow.</div>
+                                         )}
+                                     </div>
+                                 </>
                              )}
 
-                             {/* Hidden inputs reused from main scope */}
-                             <input type="file" accept="image/*" ref={fileInputRef} onChange={(e) => handleFileSelect(e, 'image')} style={{ display: 'none' }} />
-                             
-                             {previewUrl && (
-                                 <button onClick={handleCapture} disabled={uploading} style={{ width: '100%', padding: '16px', background: activeZone.color, color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold' }}>
-                                     {uploading ? 'UPLOADING...' : 'CONFIRM UPLOAD'}
-                                 </button>
+                             {modalTab === 'vision' && (
+                                 <>
+                                     <textarea value={currentInput} onChange={(e) => setCurrentInput(e.target.value)} placeholder={`What is the ultimate goal for ${activeZone.title}?`} style={{ width: '100%', height: '120px', background: '#000', border: '1px solid #333', borderRadius: '16px', color: 'white', padding: '16px', fontSize: '16px', resize: 'none', outline: 'none' }} disabled={uploading} /> 
+                                     
+                                     <div style={{ display: 'flex', gap: '10px' }}>
+                                         <button onClick={() => fileInputRef.current.click()} style={{ flex: 1, padding: '14px', background: '#222', border: '1px solid #333', borderRadius: '12px', color: '#ddd', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}><ImageIcon size={16}/> PHOTO</button>
+                                         <button onClick={() => setIsPrivateVision(!isPrivateVision)} style={{ flex: 1, padding: '14px', background: '#222', border: isPrivateVision ? '1px solid #ef4444' : '1px solid #333', borderRadius: '12px', color: isPrivateVision ? '#ef4444' : '#666', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>{isPrivateVision ? <Lock size={16}/> : <Unlock size={16}/>} {isPrivateVision ? 'PRIVATE' : 'SHARED'}</button>
+                                     </div>
+
+                                     {(previewUrl) && (
+                                         <div style={{ width: '100%', height: '200px', background: '#000', borderRadius: '16px', overflow: 'hidden', position: 'relative', border: '1px solid #333' }}>
+                                             <img src={previewUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                             <button onClick={clearMedia} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', color: 'white', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer' }}>X</button>
+                                         </div>
+                                     )}
+
+                                     <button onClick={handleCapture} disabled={uploading} style={{ width: '100%', padding: '16px', background: activeZone.color, color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', marginTop: '10px' }}>
+                                         {uploading ? 'UPLOADING...' : 'CAPTURE VISION'}
+                                     </button>
+                                     
+                                     <input type="file" accept="image/*" ref={fileInputRef} onChange={(e) => handleFileSelect(e, 'image')} style={{ display: 'none' }} />
+                                 </>
                              )}
                          </div>
                      </div>
@@ -756,7 +778,7 @@ function VisionBoard({ session }) {
           <Check size={12} /> SYSTEM OPERATIONAL • v1.0
         </div>
 
-      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } } @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
     </div>
   );
 }
