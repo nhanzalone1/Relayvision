@@ -5,6 +5,7 @@ import confetti from 'canvas-confetti';
 import { Fireworks } from 'fireworks-js';
 import { Reorder, useDragControls } from "framer-motion";
 import Onboarding from './Onboarding';
+import SystemGuide from './SystemGuide';
 
 // --- IMPORT THE TRIBUTE IMAGE DIRECTLY ---
 import tributeImage from './tribute.png'; 
@@ -61,6 +62,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [isFirstTimer, setIsFirstTimer] = useState(null); // null = loading, true/false = determined
   const [profileLoading, setProfileLoading] = useState(true);
+  const [showSystemGuide, setShowSystemGuide] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
@@ -70,6 +72,7 @@ export default function App() {
       if (!session) {
         setIsFirstTimer(null);
         setProfileLoading(true);
+        setShowSystemGuide(false);
       }
     });
     return () => subscription.unsubscribe();
@@ -109,6 +112,15 @@ export default function App() {
 
   const handleOnboardingComplete = () => {
     setIsFirstTimer(false);
+    setShowSystemGuide(true); // Auto-open System Guide after onboarding
+  };
+
+  const handleCloseSystemGuide = () => {
+    setShowSystemGuide(false);
+  };
+
+  const handleOpenSystemGuide = () => {
+    setShowSystemGuide(true);
   };
 
   if (!session) return <Auth />;
@@ -139,10 +151,15 @@ export default function App() {
     return <Onboarding session={session} onComplete={handleOnboardingComplete} />;
   }
 
-  return <VisionBoard session={session} />;
+  return (
+    <>
+      <VisionBoard session={session} onOpenSystemGuide={handleOpenSystemGuide} />
+      {showSystemGuide && <SystemGuide onClose={handleCloseSystemGuide} />}
+    </>
+  );
 }
 
-function VisionBoard({ session }) {
+function VisionBoard({ session, onOpenSystemGuide }) {
   const [mode, setMode] = useState(() => localStorage.getItem('visionMode') || 'night');
   const [activeTab, setActiveTab] = useState('mission'); 
   const [thoughts, setThoughts] = useState([]);
@@ -904,9 +921,28 @@ function VisionBoard({ session }) {
        )}
       </div>
 
-       {/* --- SYSTEM STATUS INDICATOR (TEST) --- */}
-        <div style={{ marginTop: '30px', paddingBottom: '20px', textAlign: 'center', opacity: 0.4, fontSize: '10px', letterSpacing: '1px', color: mode === 'night' ? '#555' : '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-          <Check size={12} /> SYSTEM OPERATIONAL • v1.0
+       {/* --- SYSTEM STATUS INDICATOR --- */}
+        <div style={{ marginTop: '30px', paddingBottom: '20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={onOpenSystemGuide}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: mode === 'night' ? '#666' : '#94a3b8',
+              fontSize: '11px',
+              letterSpacing: '2px',
+              cursor: 'pointer',
+              padding: '8px 16px',
+              transition: 'color 0.2s'
+            }}
+            onMouseEnter={(e) => e.target.style.color = mode === 'night' ? '#fff' : '#64748b'}
+            onMouseLeave={(e) => e.target.style.color = mode === 'night' ? '#666' : '#94a3b8'}
+          >
+            SYSTEM GUIDE
+          </button>
+          <div style={{ opacity: 0.4, fontSize: '10px', letterSpacing: '1px', color: mode === 'night' ? '#555' : '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+            <Check size={12} /> SYSTEM OPERATIONAL • v1.0
+          </div>
         </div>
 
       <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } } @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
