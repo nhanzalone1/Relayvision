@@ -604,8 +604,14 @@ function VisionBoard({ session, onOpenSystemGuide }) {
 
   // --- DND SENSORS ---
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
   );
 
   // --- SORTABLE MISSION ITEM COMPONENT ---
@@ -615,27 +621,60 @@ function VisionBoard({ session, onOpenSystemGuide }) {
       transform: CSS.Transform.toString(transform),
       transition,
       opacity: isDragging ? 0.5 : 1,
+      zIndex: isDragging ? 1000 : 1,
+    };
+
+    const handleTileClick = (e) => {
+      // Don't open edit if clicking the drag handle
+      if (e.target.closest('[data-drag-handle]')) return;
+      onEdit(mission);
     };
 
     return (
       <div ref={setNodeRef} style={style} {...attributes}>
-        <div style={{
-          background: mission.color || 'rgba(255,255,255,0.03)',
-          padding: '16px',
-          borderRadius: '16px',
-          border: '1px solid #333',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
-          {/* Drag Handle */}
-          <div {...listeners} style={{ cursor: 'grab', color: '#555', touchAction: 'none' }}>
-            <GripVertical size={18} />
+        <div
+          onClick={handleTileClick}
+          style={{
+            background: mission.color || 'rgba(255,255,255,0.03)',
+            padding: '16px',
+            borderRadius: '16px',
+            border: isDragging ? '2px solid #c084fc' : '1px solid #333',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            cursor: 'pointer',
+            transition: 'border-color 0.2s, box-shadow 0.2s',
+            boxShadow: isDragging ? '0 10px 30px rgba(0,0,0,0.5)' : 'none'
+          }}
+        >
+          {/* Drag Handle - Only this triggers drag */}
+          <div
+            {...listeners}
+            data-drag-handle="true"
+            style={{
+              cursor: 'grab',
+              color: '#666',
+              touchAction: 'none',
+              padding: '8px 4px',
+              marginLeft: '-8px',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'background 0.2s, color 0.2s'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#aaa'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; }}
+          >
+            <GripVertical size={20} />
           </div>
-          <span style={{ fontSize: '16px', color: '#ddd', flex: 1 }}>{mission.task}</span>
-          <button onClick={() => onEdit(mission)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: '4px' }}>
-            <Edit3 size={16} />
-          </button>
+
+          {/* Task Text */}
+          <span style={{ fontSize: '16px', color: '#ddd', flex: 1, lineHeight: '1.4' }}>{mission.task}</span>
+
+          {/* Edit Indicator */}
+          <div style={{ color: '#555', display: 'flex', alignItems: 'center' }}>
+            <ChevronRight size={18} />
+          </div>
         </div>
       </div>
     );
