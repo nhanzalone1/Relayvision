@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2, ShieldCheck, AlertCircle, Edit3, Fingerprint, GripVertical, History, Users, Link as LinkIcon, Check, XCircle, MessageCircle, Heart, Send, Unlock, Save, Calendar, Upload, Image as ImageIcon, Settings, ChevronRight, Menu, HelpCircle, BarChart3, Terminal, ClipboardList, LayoutGrid, FileText, Clock } from 'lucide-react';
+import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2, ShieldCheck, AlertCircle, Edit3, Fingerprint, GripVertical, History, Users, Link as LinkIcon, Check, XCircle, MessageCircle, Heart, Send, Unlock, Save, Calendar, Upload, Image as ImageIcon, Settings, ChevronRight, Menu, HelpCircle, BarChart3, Terminal, ClipboardList, LayoutGrid, FileText, Clock, Rocket } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Fireworks } from 'fireworks-js';
 import { Reorder, useDragControls } from "framer-motion";
@@ -215,6 +215,14 @@ function VisionBoard({ session, onOpenSystemGuide }) {
   // --- CONTRACT SIGNED STATE (Gatekeeper) ---
   const [contractSigned, setContractSigned] = useState(false);
 
+  // --- PROTOCOL ARMED STATE (Morning Gatekeeper) ---
+  const [protocolArmed, setProtocolArmed] = useState(() => {
+    return localStorage.getItem('protocolArmed') === 'true';
+  });
+
+  // --- DEV OVERRIDE REF (Prevents time-checker from fighting manual toggles) ---
+  const devOverrideRef = useRef(false);
+
   // --- AUDIO REFS FOR FIREWORKS ---
   const launchAudioRef = useRef(null);
   const boomAudioRef = useRef(null);
@@ -240,9 +248,13 @@ function VisionBoard({ session, onOpenSystemGuide }) {
       setSecretFlash(true);
       setTimeout(() => setSecretFlash(false), 300);
 
+      // SET DEV OVERRIDE - prevents time-checker from reverting this manual toggle
+      devOverrideRef.current = true;
+
       // Bypass all checks and toggle mode instantly
       const newMode = mode === 'night' ? 'morning' : 'night';
       setContractSigned(true); // Bypass contract check
+      setProtocolArmed(true); // Bypass protocol check
       setMode(newMode);
       localStorage.setItem('visionMode', newMode);
     } else {
@@ -361,6 +373,11 @@ function VisionBoard({ session, onOpenSystemGuide }) {
   // --- SYSTEM CLOCK: Check time every minute ---
   useEffect(() => {
     const checkSystemTime = () => {
+      // DEV OVERRIDE: If manually toggled via Secret Portal, don't fight with the clock
+      if (devOverrideRef.current) {
+        return;
+      }
+
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
@@ -369,28 +386,40 @@ function VisionBoard({ session, onOpenSystemGuide }) {
       const morningMinutes = mornH * 60 + mornM;
       const nightMinutes = nightH * 60 + nightM;
 
-      let newMode;
-      if (currentMinutes >= morningMinutes && currentMinutes < nightMinutes) {
-        newMode = 'morning';
-      } else {
-        newMode = 'night';
+      const isWithinMorningWindow = currentMinutes >= morningMinutes && currentMinutes < nightMinutes;
+
+      // --- NIGHT TIME TRANSITIONS ---
+      if (!isWithinMorningWindow) {
+        // Detect Morning -> Night transition for auto-archive
+        if (previousModeRef.current === 'morning' && mode === 'morning') {
+          autoArchiveMissions();
+          // Reset protocol armed for the next day
+          setProtocolArmed(false);
+          localStorage.removeItem('protocolArmed');
+        }
+        previousModeRef.current = 'night';
+        if (mode !== 'night') {
+          setMode('night');
+        }
+        return;
       }
 
-      // Detect Morning -> Night transition for auto-archive
-      if (previousModeRef.current === 'morning' && newMode === 'night') {
-        autoArchiveMissions();
-      }
+      // --- MORNING TIME: Only switch if protocol is armed ---
+      if (isWithinMorningWindow) {
+        // Reset contract when transitioning into morning window
+        if (previousModeRef.current === 'night') {
+          setContractSigned(false);
+        }
+        previousModeRef.current = 'morning';
 
-      // Reset contract when transitioning from night back to morning
-      if (previousModeRef.current === 'night' && newMode === 'morning') {
-        setContractSigned(false);
-      }
-
-      previousModeRef.current = newMode;
-
-      // Always update the mode based on time (gatekeeper view handled in render)
-      if (mode !== newMode) {
-        setMode(newMode);
+        // NEW GATEKEEPER LOGIC: Only switch to morning if protocol is armed
+        if (protocolArmed && mode !== 'morning') {
+          setMode('morning');
+        }
+        // If protocol is NOT armed, FORCE night mode (gatekeeper waiting for user to initiate)
+        if (!protocolArmed && mode !== 'night') {
+          setMode('night');
+        }
       }
     };
 
@@ -401,7 +430,7 @@ function VisionBoard({ session, onOpenSystemGuide }) {
     const interval = setInterval(checkSystemTime, 60000);
 
     return () => clearInterval(interval);
-  }, [schedule, mode, autoArchiveMissions, contractSigned]);
+  }, [schedule, mode, autoArchiveMissions, contractSigned, protocolArmed]);
 
   // --- FETCH SCHEDULE FROM PROFILE ---
   useEffect(() => {
@@ -617,12 +646,39 @@ function VisionBoard({ session, onOpenSystemGuide }) {
     setEditingMission(null);
     setShowDeleteConfirm(false);
   };
-  const handleLockIn = () => {
-    setShowManifestReview(false);
-    setContractSigned(true); // Sign the contract
-    confetti({ particleCount: 150, spread: 100, origin: { y: 0.8 }, colors: ['#c084fc', '#ffffff'] });
-    setTimeout(() => { setMode('morning'); window.scrollTo(0,0); }, 1000);
+  // --- TOAST/NOTIFICATION STATE ---
+  const [protocolToast, setProtocolToast] = useState(null);
+
+  const handleInitiateProtocol = () => {
+    // Step 1: Missions are already saved by NightMode component
+    // Step 2: Arm the protocol
+    setProtocolArmed(true);
+    localStorage.setItem('protocolArmed', 'true');
+
+    // Step 3: Check current time to decide behavior
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const [mornH, mornM] = schedule.morning_start_time.split(':').map(Number);
+    const morningMinutes = mornH * 60 + mornM;
+
+    if (currentMinutes < morningMinutes) {
+      // SCENARIO A: Planning ahead (before morning start time)
+      // Show toast and stay in Night Mode
+      setProtocolToast('Protocol Saved. System Armed for Morning Launch.');
+      setTimeout(() => setProtocolToast(null), 4000);
+      confetti({ particleCount: 80, spread: 60, origin: { y: 0.8 }, colors: ['#c084fc', '#a855f7'] });
+    } else {
+      // SCENARIO B: Late/Next Day (during or after morning start time)
+      // Switch immediately to Morning Mode
+      setShowManifestReview(false);
+      setContractSigned(true);
+      confetti({ particleCount: 150, spread: 100, origin: { y: 0.8 }, colors: ['#c084fc', '#ffffff'] });
+      setTimeout(() => { setMode('morning'); window.scrollTo(0, 0); }, 1000);
+    }
   };
+
+  // Keep old function for backwards compatibility (in case it's called elsewhere)
+  const handleLockIn = handleInitiateProtocol;
 
   // --- ROCKET FIREWORKS FUNCTION ---
   const launchRocketFireworks = () => {
@@ -847,7 +903,31 @@ function VisionBoard({ session, onOpenSystemGuide }) {
        
        {/* --- NOTIFICATION TOAST --- */}
        {notification && ( <div style={{ position: 'fixed', top: '70px', left: '50%', transform: 'translateX(-50%)', zIndex: 20000, background: notification.type === 'crushed' ? '#f59e0b' : (notification.type === 'error' ? '#ef4444' : '#10b981'), padding: '12px 24px', borderRadius: '30px', color: 'white', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', animation: 'fadeIn 0.3s' }}> {notification.msg} </div> )}
-       
+
+       {/* --- PROTOCOL TOAST --- */}
+       {protocolToast && (
+         <div style={{
+           position: 'fixed',
+           top: '70px',
+           left: '50%',
+           transform: 'translateX(-50%)',
+           zIndex: 20001,
+           background: 'linear-gradient(135deg, #c084fc 0%, #a855f7 100%)',
+           padding: '16px 24px',
+           borderRadius: '16px',
+           color: 'white',
+           fontWeight: 'bold',
+           boxShadow: '0 4px 20px rgba(168, 85, 247, 0.5)',
+           animation: 'fadeIn 0.3s',
+           display: 'flex',
+           alignItems: 'center',
+           gap: '10px',
+           fontSize: '14px'
+         }}>
+           <Rocket size={18} /> {protocolToast}
+         </div>
+       )}
+
        {/* --- HISTORY CALENDAR MODAL --- */}
        {historyModal && (
            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.9)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
@@ -1045,7 +1125,7 @@ function VisionBoard({ session, onOpenSystemGuide }) {
             clearMedia={clearMedia}
             fetchAllData={fetchAllData}
             onOpenSystemGuide={onOpenSystemGuide}
-            onExecuteProtocol={() => setShowManifestReview(true)}
+            onExecuteProtocol={handleInitiateProtocol}
             activeMissions={activeMissions}
           />
         )}

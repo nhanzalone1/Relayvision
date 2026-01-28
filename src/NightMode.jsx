@@ -922,7 +922,7 @@ export default function NightMode({
             onMouseEnter={(e) => { e.target.style.transform = 'scale(1.02)'; e.target.style.boxShadow = '0 6px 30px rgba(168, 85, 247, 0.6)'; }}
             onMouseLeave={(e) => { e.target.style.transform = 'scale(1)'; e.target.style.boxShadow = '0 4px 20px rgba(168, 85, 247, 0.4)'; }}
           >
-            <Rocket size={22} /> EXECUTE PROTOCOL
+            <Rocket size={22} /> INITIATE PROTOCOL
           </button>
         </div>
       )}
