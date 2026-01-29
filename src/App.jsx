@@ -503,10 +503,20 @@ function VisionBoard({ session, onOpenSystemGuide }) {
       const { data: mData } = await supabase.from('missions').select('*').order('created_at', { ascending: true });
       if (mData) {
           const myHistory = mData.filter(i => i.user_id === session.user.id);
-          setHistoryData(myHistory); 
+          setHistoryData(myHistory);
           setMyMissions(myHistory.filter(i => i.is_active));
-          setPartnerMissions(mData.filter(i => i.user_id !== session.user.id && i.is_active));
-          const recent = myHistory.slice(-10); 
+
+          // --- ALLY VIEW DATE FILTER: Only show today's missions ---
+          const startOfToday = new Date();
+          startOfToday.setHours(0, 0, 0, 0);
+          const todayISO = startOfToday.toISOString();
+          setPartnerMissions(mData.filter(i =>
+            i.user_id !== session.user.id &&
+            i.is_active &&
+            new Date(i.created_at) >= startOfToday
+          ));
+
+          const recent = myHistory.slice(-10);
           const uniqueRecents = [...new Map(recent.map(item => [item['task'], item])).values()];
           setRecentMissions(uniqueRecents);
           setCrushedHistory(mData.filter(i => i.crushed));
