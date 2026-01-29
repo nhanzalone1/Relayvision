@@ -1225,8 +1225,32 @@ function VisionBoard({ session, onOpenSystemGuide }) {
                              </button>
                         </div>
                         
-                        {/* PARTNER INDICATOR */}
-                        {m.cheer_note && <div style={{ position: 'absolute', top: '10px', right: '10px', fontSize: '16px' }}>❤️</div>}
+                        {/* PARTNER CHEER - Click to Read */}
+                        {m.cheer_note && (
+                          <button
+                            onClick={() => showNotification(`💌 From your Ally: "${m.cheer_note}"`, 'cheer')}
+                            style={{
+                              position: 'absolute',
+                              top: '10px',
+                              right: '10px',
+                              background: 'rgba(255,255,255,0.9)',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '32px',
+                              height: '32px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                              fontSize: '16px',
+                              animation: 'pulse 2s infinite'
+                            }}
+                            title="Click to read message"
+                          >
+                            ❤️
+                          </button>
+                        )}
                     </div> 
                   ))} 
                </div> 
@@ -1245,9 +1269,18 @@ function VisionBoard({ session, onOpenSystemGuide }) {
                                         </div> 
                                         <span style={{ textDecoration: 'line-through', color: m.completed ? (m.crushed ? '#d97706' : '#166534') : '#334155', fontWeight: '600', fontSize: '16px' }}>{m.task}</span> 
                                     </div> 
-                                    <button onClick={() => toggleCrushed(m)} style={{ background: m.crushed ? '#f59e0b' : 'transparent', border: m.crushed ? 'none' : '1px solid #e2e8f0', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}> 
-                                        <Flame size={16} color={m.crushed ? 'white' : '#cbd5e1'} fill={m.crushed ? 'white' : 'transparent'} /> 
-                                    </button> 
+                                    {m.cheer_note && (
+                                      <button
+                                        onClick={() => showNotification(`💌 From your Ally: "${m.cheer_note}"`, 'cheer')}
+                                        style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '14px' }}
+                                        title="Click to read message"
+                                      >
+                                        ❤️
+                                      </button>
+                                    )}
+                                    <button onClick={() => toggleCrushed(m)} style={{ background: m.crushed ? '#f59e0b' : 'transparent', border: m.crushed ? 'none' : '1px solid #e2e8f0', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                        <Flame size={16} color={m.crushed ? 'white' : '#cbd5e1'} fill={m.crushed ? 'white' : 'transparent'} />
+                                    </button>
                                 </div>
                                 {m.crushed && ( <div style={{ marginTop: '5px' }}> {m.victory_note ? ( <div style={{ color: '#c2410c', fontWeight: 'bold', fontSize: '14px', background: 'rgba(255,255,255,0.5)', padding: '8px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}> <Trophy size={14} /> <span>{m.victory_note}</span> </div> ) : ( <div style={{ display: 'flex', gap: '8px' }}> <input type="text" placeholder="How did you crush it?" value={tempVictoryNotes[m.id] || ''} onChange={(e) => handleDraftChange(m.id, e.target.value)} style={{ flex: 1, padding: '8px', fontSize: '14px', border: '1px solid #fed7aa', borderRadius: '8px', background: '#fff', color: '#c2410c', outline: 'none' }} /> <button onClick={() => handleNoteSave(m.id)} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '0 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>SAVE</button> </div> )} </div> )}
                             </div>
