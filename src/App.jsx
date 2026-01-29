@@ -368,7 +368,11 @@ function VisionBoard({ session, onOpenSystemGuide }) {
     fetchAllData();
   }, [session]);
 
-  // --- SYSTEM CLOCK: Check time every minute ---
+  // --- SYSTEM CLOCK: Time-Aware Gatekeeper (runs every minute) ---
+  // LOGIC:
+  // 1. IF (Time is Night) -> Force Night Mode (regardless of arming)
+  // 2. IF (Time is Morning) AND (protocolArmed === TRUE) -> Switch/Stay in Morning Mode
+  // 3. IF (Time is Morning) AND (protocolArmed === FALSE) -> Force Night Mode (user must plan first)
   useEffect(() => {
     const checkSystemTime = () => {
       // DEV OVERRIDE: If manually toggled via Secret Portal, don't fight with the clock
@@ -386,7 +390,7 @@ function VisionBoard({ session, onOpenSystemGuide }) {
 
       const isWithinMorningWindow = currentMinutes >= morningMinutes && currentMinutes < nightMinutes;
 
-      // --- NIGHT TIME TRANSITIONS ---
+      // --- RULE 1: NIGHT TIME -> Force Night Mode (regardless of arming) ---
       if (!isWithinMorningWindow) {
         // Detect Morning -> Night transition for auto-archive
         if (previousModeRef.current === 'morning' && mode === 'morning') {
@@ -402,7 +406,7 @@ function VisionBoard({ session, onOpenSystemGuide }) {
         return;
       }
 
-      // --- MORNING TIME: Only switch if protocol is armed ---
+      // --- MORNING TIME WINDOW ---
       if (isWithinMorningWindow) {
         // Reset contract when transitioning into morning window
         if (previousModeRef.current === 'night') {
@@ -410,11 +414,11 @@ function VisionBoard({ session, onOpenSystemGuide }) {
         }
         previousModeRef.current = 'morning';
 
-        // NEW GATEKEEPER LOGIC: Only switch to morning if protocol is armed
+        // RULE 2: Morning + Protocol Armed -> Switch/Stay in Morning Mode
         if (protocolArmed && mode !== 'morning') {
           setMode('morning');
         }
-        // If protocol is NOT armed, FORCE night mode (gatekeeper waiting for user to initiate)
+        // RULE 3: Morning + Protocol NOT Armed -> Force Night Mode (gatekeeper blocks until user plans)
         if (!protocolArmed && mode !== 'night') {
           setMode('night');
         }
@@ -648,30 +652,30 @@ function VisionBoard({ session, onOpenSystemGuide }) {
   const [protocolToast, setProtocolToast] = useState(null);
 
   const handleInitiateProtocol = () => {
-    // Step 1: Missions are already saved by NightMode component
+    // --- TIME-AWARE GATEKEEPER ---
+    // Step 1: Missions are already saved by NightMode component (persisted in real-time)
+
     // Step 2: Arm the protocol
     setProtocolArmed(true);
     localStorage.setItem('protocolArmed', 'true');
 
-    // Step 3: Check current time to decide behavior
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const [mornH, mornM] = schedule.morning_start_time.split(':').map(Number);
-    const morningMinutes = mornH * 60 + mornM;
+    // Step 3: IMMEDIATE TIME CHECK (strict 6 AM threshold)
+    const currentHour = new Date().getHours();
+    const MORNING_THRESHOLD = 6; // 6 AM
 
-    if (currentMinutes < morningMinutes) {
-      // SCENARIO A: Planning ahead (before morning start time)
-      // Show toast and stay in Night Mode
-      setProtocolToast('Protocol Saved. System Armed for Morning Launch.');
-      setTimeout(() => setProtocolToast(null), 4000);
-      confetti({ particleCount: 80, spread: 60, origin: { y: 0.8 }, colors: ['#c084fc', '#a855f7'] });
-    } else {
-      // SCENARIO B: Late/Next Day (during or after morning start time)
-      // Switch immediately to Morning Mode
+    if (currentHour >= MORNING_THRESHOLD) {
+      // SCENARIO B: It's already morning (6 AM or later)
+      // Switch IMMEDIATELY to Morning Mode
       setShowManifestReview(false);
       setContractSigned(true);
       confetti({ particleCount: 150, spread: 100, origin: { y: 0.8 }, colors: ['#c084fc', '#ffffff'] });
       setTimeout(() => { setMode('morning'); window.scrollTo(0, 0); }, 1000);
+    } else {
+      // SCENARIO A: It's still night (before 6 AM)
+      // DO NOT switch modes - stay in Night Mode
+      setProtocolToast('System Armed. Standby for Morning Launch.');
+      setTimeout(() => setProtocolToast(null), 4000);
+      confetti({ particleCount: 80, spread: 60, origin: { y: 0.8 }, colors: ['#c084fc', '#a855f7'] });
     }
   };
 
