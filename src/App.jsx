@@ -740,7 +740,11 @@ function VisionBoard({ session, onOpenSystemGuide }) {
       }
     }
     const { error } = await supabase.from('missions').update(updates).eq('id', mission.id);
-    if (!error) { setMyMissions(nextMissions); }
+    if (!error) {
+      setMyMissions(nextMissions);
+      // Update historyData for calendar colors
+      setHistoryData(historyData.map(m => m.id === mission.id ? { ...m, ...updates } : m));
+    }
   };
   const toggleCrushed = async (mission) => {
     const newCrushed = !mission.crushed;
@@ -758,6 +762,8 @@ function VisionBoard({ session, onOpenSystemGuide }) {
     const { error } = await supabase.from('missions').update(updates).eq('id', mission.id);
     if (!error) {
       setMyMissions(nextMissions);
+      // Update historyData for calendar colors
+      setHistoryData(historyData.map(m => m.id === mission.id ? { ...m, ...updates } : m));
       if(newCrushed) setCrushedHistory([ { ...mission, ...updates }, ...crushedHistory ]);
       else setCrushedHistory(crushedHistory.filter(m => m.id !== mission.id));
     }
