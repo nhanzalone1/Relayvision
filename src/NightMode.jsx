@@ -173,6 +173,7 @@ export default function NightMode({
   uploading,
   fileInputRef,
   handleCapture,
+  handleFileSelect,
   clearMedia,
   fetchAllData,
   onOpenSystemGuide,
@@ -746,6 +747,15 @@ export default function NightMode({
 
               {modalTab === 'vision' && (
                 <>
+                  {/* Hidden File Input for Media Upload */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={(e) => handleFileSelect(e, e.target.files[0]?.type?.startsWith('video') ? 'video' : 'image')}
+                    accept="image/*,video/*"
+                    style={{ display: 'none' }}
+                  />
+
                   <textarea
                     value={currentInput}
                     onChange={(e) => setCurrentInput(e.target.value)}
@@ -755,18 +765,60 @@ export default function NightMode({
                   />
 
                   <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={() => fileInputRef.current.click()} style={{ flex: 1, padding: '14px', background: '#222', border: '1px solid #333', borderRadius: '12px', color: '#ddd', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}><ImageIcon size={16} /> PHOTO</button>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      style={{
+                        flex: 1,
+                        padding: '14px',
+                        background: '#222',
+                        border: '1px solid #333',
+                        borderRadius: '12px',
+                        color: '#ddd',
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        cursor: uploading ? 'not-allowed' : 'pointer',
+                        opacity: uploading ? 0.5 : 1
+                      }}
+                    >
+                      <ImageIcon size={16} /> PHOTO / VIDEO
+                    </button>
                     <button onClick={() => setIsPrivateVision(!isPrivateVision)} style={{ flex: 1, padding: '14px', background: '#222', border: isPrivateVision ? '1px solid #ef4444' : '1px solid #333', borderRadius: '12px', color: isPrivateVision ? '#ef4444' : '#666', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>{isPrivateVision ? <Lock size={16} /> : <Unlock size={16} />} {isPrivateVision ? 'PRIVATE' : 'SHARED'}</button>
                   </div>
 
+                  {/* Media Preview */}
                   {previewUrl && (
-                    <div style={{ width: '100%', height: '200px', background: '#000', borderRadius: '16px', overflow: 'hidden', position: 'relative', border: '1px solid #333' }}>
-                      <img src={previewUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      <button onClick={clearMedia} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', color: 'white', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer' }}>X</button>
+                    <div style={{ width: '100%', height: '200px', background: '#000', borderRadius: '16px', overflow: 'hidden', position: 'relative', border: '2px solid ' + activeZone.color }}>
+                      {previewUrl.includes('video') || previewUrl.includes('mp4') || previewUrl.includes('mov') || previewUrl.includes('webm') ? (
+                        <video src={previewUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} controls />
+                      ) : (
+                        <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      )}
+                      <button onClick={clearMedia} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.8)', color: 'white', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
                     </div>
                   )}
 
-                  <button onClick={handleCapture} disabled={uploading} style={{ width: '100%', padding: '16px', background: activeZone.color, color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', marginTop: '10px' }}>
+                  <button
+                    onClick={() => handleCapture(activeZone.id)}
+                    disabled={uploading || (!currentInput.trim() && !previewUrl)}
+                    style={{
+                      width: '100%',
+                      padding: '16px',
+                      background: uploading ? '#666' : activeZone.color,
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '16px',
+                      fontWeight: 'bold',
+                      fontSize: '14px',
+                      cursor: (uploading || (!currentInput.trim() && !previewUrl)) ? 'not-allowed' : 'pointer',
+                      marginTop: '10px',
+                      opacity: (!currentInput.trim() && !previewUrl) ? 0.5 : 1,
+                      transition: 'all 0.2s'
+                    }}
+                  >
                     {uploading ? 'UPLOADING...' : 'CAPTURE VISION'}
                   </button>
                 </>

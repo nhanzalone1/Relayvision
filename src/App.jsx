@@ -739,7 +739,61 @@ function VisionBoard({ session, onOpenSystemGuide }) {
   const startAudioRecording = async () => { try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); let options = {}; if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' }; else if (MediaRecorder.isTypeSupported('audio/webm')) options = { mimeType: 'audio/webm' }; const recorder = new MediaRecorder(stream, options); mediaRecorderRef.current = recorder; audioChunksRef.current = []; recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); }; recorder.onstop = () => { const type = options.mimeType || 'audio/webm'; const blob = new Blob(audioChunksRef.current, { type }); setAudioBlob(blob); setMediaFile(null); setMediaType('audio'); setPreviewUrl(URL.createObjectURL(blob)); setIsQuoteMode(false); stream.getTracks().forEach(track => track.stop()); }; recorder.start(); setIsRecordingAudio(true); setDebugLog('Recording Audio...'); } catch (err) { alert("Microphone access denied."); } };
   const stopAudioRecording = () => { if (mediaRecorderRef.current && isRecordingAudio) { mediaRecorderRef.current.stop(); setIsRecordingAudio(false); setDebugLog(''); } };
   const clearMedia = () => { setMediaFile(null); setAudioBlob(null); setMediaType('text'); setPreviewUrl(null); setIsQuoteMode(false); if (fileInputRef.current) fileInputRef.current.value = ''; if (videoInputRef.current) videoInputRef.current.value = ''; };
-  const handleCapture = async () => { if (!currentInput.trim() && !mediaFile && !audioBlob) return; setUploading(true); setDebugLog('Securing Relay...'); let imageUrl = null; let videoUrl = null; let audioUrl = null; const timestamp = Date.now(); try { if (mediaFile) { const ext = mediaFile.name.split('.').pop() || 'mov'; const fileName = `${mediaType}-${timestamp}.${ext}`; const { data, error } = await supabase.storage.from('images').upload(fileName, mediaFile); if (error) throw error; if (data) { const publicUrl = supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl; if (mediaType === 'image') imageUrl = publicUrl; if (mediaType === 'video') videoUrl = publicUrl; } } if (audioBlob) { const ext = audioBlob.type.includes('mp4') ? 'mp4' : 'webm'; const fileName = `audio-${timestamp}.${ext}`; const { data, error } = await supabase.storage.from('images').upload(fileName, audioBlob); if (error) throw error; if (data) audioUrl = supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl; } const { data, error } = await supabase.from('thoughts').insert([{ text: currentInput, image_url: imageUrl, video_url: videoUrl, audio_url: audioUrl, is_quote: isQuoteMode, ignited: false, archived: false, user_id: session.user.id, goal_id: selectedGoalId, is_private: isPrivateVision }]).select(); if (error) throw error; if (data) { setMyThoughts([data[0], ...myThoughts]); calculateStreak([data[0], ...myThoughts]); setCurrentInput(''); clearMedia(); setIsPrivateVision(false); setDebugLog('Relay Secured.'); setTimeout(() => setDebugLog(''), 2000); } } catch (err) { console.error(err); setDebugLog("Error: " + err.message); } finally { setUploading(false); } };
+  const handleCapture = async (goalIdOverride = null) => {
+    if (!currentInput.trim() && !mediaFile && !audioBlob) return;
+    setUploading(true);
+    setDebugLog('Securing Relay...');
+    let imageUrl = null; let videoUrl = null; let audioUrl = null;
+    const timestamp = Date.now();
+    const goalId = goalIdOverride !== null ? goalIdOverride : selectedGoalId;
+    try {
+      if (mediaFile) {
+        const ext = mediaFile.name.split('.').pop() || 'mov';
+        const fileName = `${session.user.id}/${mediaType}-${timestamp}.${ext}`;
+        const { data, error } = await supabase.storage.from('vision-media').upload(fileName, mediaFile);
+        if (error) throw error;
+        if (data) {
+          const publicUrl = supabase.storage.from('vision-media').getPublicUrl(fileName).data.publicUrl;
+          if (mediaType === 'image') imageUrl = publicUrl;
+          if (mediaType === 'video') videoUrl = publicUrl;
+        }
+      }
+      if (audioBlob) {
+        const ext = audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
+        const fileName = `${session.user.id}/audio-${timestamp}.${ext}`;
+        const { data, error } = await supabase.storage.from('vision-media').upload(fileName, audioBlob);
+        if (error) throw error;
+        if (data) audioUrl = supabase.storage.from('vision-media').getPublicUrl(fileName).data.publicUrl;
+      }
+      const { data, error } = await supabase.from('thoughts').insert([{
+        text: currentInput,
+        image_url: imageUrl,
+        video_url: videoUrl,
+        audio_url: audioUrl,
+        is_quote: isQuoteMode,
+        ignited: false,
+        archived: false,
+        user_id: session.user.id,
+        goal_id: goalId,
+        is_private: isPrivateVision
+      }]).select();
+      if (error) throw error;
+      if (data) {
+        setMyThoughts([data[0], ...myThoughts]);
+        calculateStreak([data[0], ...myThoughts]);
+        setCurrentInput('');
+        clearMedia();
+        setIsPrivateVision(false);
+        setDebugLog('Vision Captured.');
+        setTimeout(() => setDebugLog(''), 2000);
+      }
+    } catch (err) {
+      console.error(err);
+      setDebugLog("Error: " + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
   function calculateStreak(data) { if (!data || data.length === 0) { setStreak(0); return; } const uniqueDates = [...new Set(data.map(item => new Date(item.created_at).toDateString()))]; const sortedDates = uniqueDates.map(d => new Date(d)).sort((a, b) => b - a); const today = new Date().toDateString(); const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1); if (sortedDates[0].toDateString() !== today && sortedDates[0].toDateString() !== yesterday.toDateString()) { setStreak(0); return; } let currentStreak = 0; let checkDate = new Date(); if (sortedDates[0].toDateString() !== today) checkDate.setDate(checkDate.getDate() - 1); for (let i = 0; i < sortedDates.length; i++) { if (sortedDates[i].toDateString() === checkDate.toDateString()) { currentStreak++; checkDate.setDate(checkDate.getDate() - 1); } else break; } setStreak(currentStreak); }
   const deleteThought = async (id) => { const { error } = await supabase.from('thoughts').delete().eq('id', id); if (!error) { const newThoughts = myThoughts.filter(t => t.id !== id); setMyThoughts(newThoughts); calculateStreak(newThoughts); } };
   const toggleIgnite = async (id, currentStatus) => { if (!currentStatus) confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: mode === 'night' ? ['#c084fc', '#a855f7', '#ffffff'] : ['#fbbf24', '#f59e0b', '#ef4444'] }); const { error } = await supabase.from('thoughts').update({ ignited: !currentStatus }).eq('id', id); if (!error) setMyThoughts(myThoughts.map(t => t.id === id ? { ...t, ignited: !t.ignited } : t)); };
@@ -1080,6 +1134,7 @@ function VisionBoard({ session, onOpenSystemGuide }) {
             uploading={uploading}
             fileInputRef={fileInputRef}
             handleCapture={handleCapture}
+            handleFileSelect={handleFileSelect}
             clearMedia={clearMedia}
             fetchAllData={fetchAllData}
             onOpenSystemGuide={onOpenSystemGuide}
