@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { Target, Plus, X, Lock, Unlock, GripVertical, ChevronRight, Trash2, Save, AlertCircle, Image as ImageIcon, Settings, Rocket, HelpCircle } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -200,6 +200,15 @@ export default function NightMode({
   const [editZoneTitle, setEditZoneTitle] = useState('');
   const [editZoneColor, setEditZoneColor] = useState('');
   const [showZoneDeleteConfirm, setShowZoneDeleteConfirm] = useState(false);
+
+  // --- AUTO-TRIGGER NIGHT MODE ONBOARDING ---
+  useEffect(() => {
+    const hasSeen = localStorage.getItem('relay_has_seen_night_onboarding');
+    if (!hasSeen) {
+      console.log('[ONBOARDING] Triggering Night Mode SystemGuide');
+      onOpenSystemGuide('night', true); // true = isFirstRun
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- DND SENSORS ---
   const sensors = useSensors(

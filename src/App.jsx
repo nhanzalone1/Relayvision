@@ -6,10 +6,7 @@ import { Reorder, useDragControls } from "framer-motion";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import Onboarding from './Onboarding';
 import SystemGuide from './SystemGuide';
-import NightModeBriefing from './NightModeBriefing';
-import MorningModeBriefing from './MorningModeBriefing';
 import ScheduleSettings from './ScheduleSettings';
 import NightMode from './NightMode';
 import FireworksOverlay from './FireworksOverlay';
@@ -46,7 +43,7 @@ function Auth({ onLogin }) {
   };
 
   return (
-    <div style={{ minHeight: '100vh', minHeight: '100dvh', background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', color: 'white' }}>
+    <div style={{ minHeight: '100dvh', background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', color: 'white' }}>
       <style>{globalStyles}</style>
       <div style={{ maxWidth: '350px', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}> <div style={{ background: 'rgba(192, 132, 252, 0.1)', padding: '20px', borderRadius: '50%' }}> <Lock size={40} color="#c084fc" /> </div> </div>
@@ -67,105 +64,45 @@ function Auth({ onLogin }) {
 // --- MAIN APP ---
 export default function App() {
   const [session, setSession] = useState(null);
-  const [isFirstTimer, setIsFirstTimer] = useState(null); // null = loading, true/false = determined
-  const [profileLoading, setProfileLoading] = useState(true);
   const [showSystemGuide, setShowSystemGuide] = useState(false);
+  const [systemGuideMode, setSystemGuideMode] = useState('night');
+  const [isFirstRun, setIsFirstRun] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      // Reset states when session changes
       if (!session) {
-        setIsFirstTimer(null);
-        setProfileLoading(true);
         setShowSystemGuide(false);
       }
     });
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch profile to check is_first_timer
-  useEffect(() => {
-    async function checkFirstTimer() {
-      if (!session) {
-        setProfileLoading(false);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('is_first_timer')
-          .eq('id', session.user.id)
-          .single();
-
-        if (error) {
-          console.error('Error fetching profile:', error);
-          setIsFirstTimer(false); // Default to not first-timer on error
-        } else {
-          setIsFirstTimer(data?.is_first_timer ?? false);
-        }
-      } catch (err) {
-        console.error('Profile check error:', err);
-        setIsFirstTimer(false);
-      } finally {
-        setProfileLoading(false);
-      }
-    }
-
-    checkFirstTimer();
-  }, [session]);
-
-  const [systemGuideMode, setSystemGuideMode] = useState('night');
-
-  const handleOnboardingComplete = () => {
-    setIsFirstTimer(false);
-    setSystemGuideMode('night');
-    setShowSystemGuide(true); // Auto-open System Guide after onboarding
-  };
-
   const handleCloseSystemGuide = () => {
+    // Save mode-specific flag when closing the guide (for first-run)
+    if (isFirstRun) {
+      const key = systemGuideMode === 'night'
+        ? 'relay_has_seen_night_onboarding'
+        : 'relay_has_seen_morning_onboarding';
+      localStorage.setItem(key, 'true');
+      setIsFirstRun(false);
+    }
     setShowSystemGuide(false);
   };
 
-  const handleOpenSystemGuide = (guideMode = 'night') => {
+  const handleOpenSystemGuide = (guideMode = 'night', firstRun = false) => {
     setSystemGuideMode(guideMode);
+    setIsFirstRun(firstRun);
     setShowSystemGuide(true);
   };
 
   if (!session) return <Auth />;
 
-  // Show loading state while checking profile
-  if (profileLoading) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        minHeight: '100dvh',
-        background: 'radial-gradient(circle at center, #1f1f22 0%, #000000 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#c084fc'
-      }}>
-        <style>{globalStyles}</style>
-        <div style={{ textAlign: 'center' }}>
-          <Fingerprint size={48} style={{ animation: 'pulse 1s infinite', marginBottom: '20px' }} />
-          <p style={{ letterSpacing: '2px', fontSize: '14px' }}>INITIALIZING...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show onboarding for first-time users
-  if (isFirstTimer) {
-    return <Onboarding session={session} onComplete={handleOnboardingComplete} />;
-  }
-
   return (
     <>
       <VisionBoard session={session} onOpenSystemGuide={handleOpenSystemGuide} />
-      {showSystemGuide && <SystemGuide onClose={handleCloseSystemGuide} mode={systemGuideMode} />}
+      {showSystemGuide && <SystemGuide onClose={handleCloseSystemGuide} mode={systemGuideMode} isFirstRun={isFirstRun} />}
     </>
   );
 }
@@ -203,9 +140,17 @@ function VisionBoard({ session, onOpenSystemGuide }) {
   const [modalTab, setModalTab] = useState('mission');
   const [showManifestReview, setShowManifestReview] = useState(false); // The Checkout Screen
 
-  // --- MODE BRIEFING STATES ---
-  const [showNightBriefing, setShowNightBriefing] = useState(false);
-  const [showMorningBriefing, setShowMorningBriefing] = useState(false);
+  // --- AUTO-TRIGGER MORNING MODE ONBOARDING ---
+  // Fires when user enters morning mode for the first time
+  useEffect(() => {
+    if (mode === 'morning') {
+      const hasSeen = localStorage.getItem('relay_has_seen_morning_onboarding');
+      if (!hasSeen) {
+        console.log('[ONBOARDING] Triggering Morning Mode SystemGuide');
+        onOpenSystemGuide('morning', true); // true = isFirstRun
+      }
+    }
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- SCHEDULE STATES ---
   const [showScheduleSettings, setShowScheduleSettings] = useState(false);
@@ -336,28 +281,6 @@ function VisionBoard({ session, onOpenSystemGuide }) {
   }, []);
 
   useEffect(() => { localStorage.setItem('visionMode', mode); }, [mode]);
-
-  // --- CHECK FOR FIRST-TIME MODE ENTRY ---
-  useEffect(() => {
-    const nightBriefingSeen = localStorage.getItem('nightBriefingSeen');
-    const morningBriefingSeen = localStorage.getItem('morningBriefingSeen');
-
-    if (mode === 'night' && !nightBriefingSeen) {
-      setShowNightBriefing(true);
-    } else if (mode === 'morning' && !morningBriefingSeen) {
-      setShowMorningBriefing(true);
-    }
-  }, [mode]);
-
-  const handleCloseNightBriefing = () => {
-    localStorage.setItem('nightBriefingSeen', 'true');
-    setShowNightBriefing(false);
-  };
-
-  const handleCloseMorningBriefing = () => {
-    localStorage.setItem('morningBriefingSeen', 'true');
-    setShowMorningBriefing(false);
-  };
 
   // --- AUTO-ARCHIVE: Runs when transitioning from Morning to Night ---
   const autoArchiveMissions = useCallback(async () => {
@@ -1368,10 +1291,6 @@ function VisionBoard({ session, onOpenSystemGuide }) {
 
       <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } } @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } } @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }`}</style>
 
-      {/* --- MODE BRIEFINGS --- */}
-      {showNightBriefing && <NightModeBriefing onClose={handleCloseNightBriefing} />}
-      {showMorningBriefing && <MorningModeBriefing onClose={handleCloseMorningBriefing} />}
-
       {/* --- SCHEDULE SETTINGS --- */}
       {showScheduleSettings && (
         <ScheduleSettings
@@ -1508,6 +1427,7 @@ function VisionBoard({ session, onOpenSystemGuide }) {
         isActive={showFireworks}
         onComplete={handleFireworksComplete}
       />
+
     </>
   );
 }

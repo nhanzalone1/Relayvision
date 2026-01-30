@@ -113,7 +113,7 @@ const morningSlides = [
   }
 ];
 
-export default function SystemGuide({ onClose, mode = 'night' }) {
+export default function SystemGuide({ onClose, mode = 'night', isFirstRun = false }) {
   const [currentSlide, setCurrentSlide] = useState(0);
 
   const slides = mode === 'night' ? nightSlides : morningSlides;
@@ -191,21 +191,21 @@ export default function SystemGuide({ onClose, mode = 'night' }) {
           textAlign: 'center'
         }}>
           <div style={{
-            fontSize: '10px',
+            fontSize: isFirstRun ? '12px' : '10px',
             color: accentColor,
             letterSpacing: '3px',
             textTransform: 'uppercase',
             fontWeight: '700',
             marginBottom: '8px'
           }}>
-            {isNight ? '🌙 NIGHT MODE' : '☀️ MORNING MODE'}
+            {isFirstRun ? '🚀 WELCOME TO RELAY VISION' : (isNight ? '🌙 NIGHT MODE' : '☀️ MORNING MODE')}
           </div>
           <div style={{
             fontSize: '12px',
             color: '#64748b',
             letterSpacing: '1px'
           }}>
-            {isNight ? 'PLANNING PHASE' : 'EXECUTION PHASE'}
+            {isFirstRun ? 'HOW IT WORKS' : (isNight ? 'PLANNING PHASE' : 'EXECUTION PHASE')}
           </div>
         </div>
 
@@ -386,7 +386,7 @@ export default function SystemGuide({ onClose, mode = 'night' }) {
                 boxShadow: `0 4px 20px ${accentColor}40`
               }}
             >
-              {isNight ? 'GOT IT!' : 'LET\'S GO!'}
+              {isFirstRun ? 'GET STARTED' : (isNight ? 'GOT IT!' : 'LET\'S GO!')}
             </button>
           ) : (
             <button
