@@ -415,41 +415,56 @@ function VisionBoard({ session, onOpenSystemGuide }) {
 
   // --- DATA FETCHING ---
   const fetchAllData = useCallback(async () => {
-      const profile = await fetchProfile(); 
-      if(profile?.partner_id) fetchPartnerProfile(profile.partner_id);
+      const profile = await fetchProfile();
 
-      const { data: gData } = await supabase.from('goals').select('*');
+      // --- FETCH MY DATA ---
+      const { data: gData } = await supabase.from('goals').select('*').eq('user_id', session.user.id);
       if (gData) {
-          setMyGoals(gData.filter(i => i.user_id === session.user.id));
-          setPartnerGoals(gData.filter(i => i.user_id !== session.user.id));
+          setMyGoals(gData);
       }
-      const { data: tData } = await supabase.from('thoughts').select('*').order('created_at', { ascending: false });
+      const { data: tData } = await supabase.from('thoughts').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false });
       if (tData) {
-          setMyThoughts(tData.filter(i => i.user_id === session.user.id));
-          setPartnerThoughts(tData.filter(i => i.user_id !== session.user.id));
-          calculateStreak(tData.filter(i => i.user_id === session.user.id));
+          setMyThoughts(tData);
+          calculateStreak(tData);
       }
-      const { data: mData } = await supabase.from('missions').select('*').order('created_at', { ascending: true });
+      const { data: mData } = await supabase.from('missions').select('*').eq('user_id', session.user.id).order('created_at', { ascending: true });
       if (mData) {
-          const myHistory = mData.filter(i => i.user_id === session.user.id);
-          setHistoryData(myHistory);
-          setMyMissions(myHistory.filter(i => i.is_active));
-
-          // --- ALLY VIEW DATE FILTER: Only show today's missions ---
-          // TIMEZONE-PROOF: setHours(0,0,0,0) uses LOCAL midnight, not UTC
-          // So a mission created at 11:59 PM EST counts for that local day
-          const startOfToday = new Date();
-          startOfToday.setHours(0, 0, 0, 0);
-          setPartnerMissions(mData.filter(i =>
-            i.user_id !== session.user.id &&
-            i.is_active &&
-            new Date(i.created_at) >= startOfToday
-          ));
-
-          const recent = myHistory.slice(-10);
+          setHistoryData(mData);
+          setMyMissions(mData.filter(i => i.is_active));
+          const recent = mData.slice(-10);
           const uniqueRecents = [...new Map(recent.map(item => [item['task'], item])).values()];
           setRecentMissions(uniqueRecents);
-          setCrushedHistory(mData.filter(i => i.crushed));
+          setCrushedHistory(prev => [...prev.filter(i => i.user_id !== session.user.id), ...mData.filter(i => i.crushed)]);
+      }
+
+      // --- FETCH PARTNER DATA (Only if partnership is ACTIVE) ---
+      if (profile?.partner_id && profile?.status === 'active') {
+          fetchPartnerProfile(profile.partner_id);
+
+          // Fetch partner's goals
+          const { data: partnerGoalsData } = await supabase.from('goals').select('*').eq('user_id', profile.partner_id);
+          if (partnerGoalsData) {
+              setPartnerGoals(partnerGoalsData.filter(g => !g.is_private));
+          }
+
+          // Fetch partner's thoughts
+          const { data: partnerThoughtsData } = await supabase.from('thoughts').select('*').eq('user_id', profile.partner_id).order('created_at', { ascending: false });
+          if (partnerThoughtsData) {
+              setPartnerThoughts(partnerThoughtsData.filter(t => !t.is_private));
+          }
+
+          // Fetch partner's missions (all active - no date filter since missions are planned the night before)
+          const { data: partnerMissionsData } = await supabase.from('missions').select('*').eq('user_id', profile.partner_id).order('created_at', { ascending: true });
+          if (partnerMissionsData) {
+              setPartnerMissions(partnerMissionsData.filter(i => i.is_active));
+              setCrushedHistory(prev => [...prev.filter(i => i.user_id === session.user.id), ...partnerMissionsData.filter(i => i.crushed)]);
+          }
+      } else {
+          // Clear partner data if no active partnership
+          setPartnerGoals([]);
+          setPartnerThoughts([]);
+          setPartnerMissions([]);
+          setPartnerProfile(null);
       }
   }, [session]);
 
@@ -1253,7 +1268,215 @@ function VisionBoard({ session, onOpenSystemGuide }) {
            {activeTab === 'vision' && visionsLoading && ( <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px', color: '#64748b' }}><div style={{ textAlign: 'center' }}><div style={{ width: '24px', height: '24px', border: '3px solid #e2e8f0', borderTopColor: '#f59e0b', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 10px auto' }} /><span style={{ fontSize: '13px' }}>Loading visions...</span></div><style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style></div> )}
            {activeTab === 'vision' && !viewingGoal && !visionsLoading && ( <div style={{ animation: 'fadeIn 0.3s', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}> <div onClick={() => setViewingGoal('all')} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}> <div style={{ background: '#f1f5f9', padding: '15px', borderRadius: '50%' }}><Archive size={24} color="#64748b" /></div> <span style={{ fontWeight: 'bold', color: '#334155' }}>All Visions</span> </div> {myGoals.map(g => ( <div key={g.id} onClick={() => setViewingGoal(g)} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', borderTop: `4px solid ${g.color}`, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}> <div style={{ background: `${g.color}20`, padding: '15px', borderRadius: '50%' }}><Target size={24} color={g.color} /></div> <span style={{ fontWeight: 'bold', color: '#334155', textAlign: 'center' }}>{g.title}</span> {g.is_private && <Lock size={12} color="#94a3b8" style={{ marginTop: '5px' }} />} <span style={{ fontSize: '10px', color: '#94a3b8' }}>{myThoughts.filter(t => t.goal_id === g.id).length} Items</span> </div> ))} {myGoals.length === 0 && <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '14px' }}>No goals created yet. Use Night Mode to add goals.</div>} </div> )}
            {activeTab === 'vision' && viewingGoal && !visionsLoading && ( <div style={{ animation: 'fadeIn 0.3s' }}> <button onClick={() => { setViewingGoal(null); setShowArchives(false); }} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', color: '#64748b', fontSize: '14px', marginBottom: '15px', cursor: 'pointer' }}><ArrowLeft size={16} /> Back to Folders</button> <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}> <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: 0 }}>{viewingGoal === 'all' ? 'All Visions' : viewingGoal.title}</h2> {viewingGoal !== 'all' && ( <button onClick={() => toggleGoalPrivacy(viewingGoal)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: viewingGoal.is_private ? '#ef4444' : '#94a3b8' }}> {viewingGoal.is_private ? <Lock size={20} /> : <Unlock size={20} />} </button> )} </div> <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}> <button onClick={() => setShowArchives(!showArchives)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', background: showArchives ? '#334155' : 'white', color: showArchives ? 'white' : '#64748b', border: '1px solid #cbd5e1', padding: '8px', borderRadius: '12px', cursor: 'pointer', fontSize: '12px' }}> {showArchives ? <Target size={14} /> : <History size={14} />} {showArchives ? 'Current' : 'Vault'} </button> </div> <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '1px', marginBottom: '10px' }}>{showArchives ? 'The Hall of Fame (Archived)' : 'The Fuel (Media)'}</h3> <div style={{ display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '20px', scrollbarWidth: 'none' }}> {getDisplayedThoughts().filter(t => !t.is_quote).map(t => ( <div key={t.id} style={{ position: 'relative', minWidth: '260px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}> <div onClick={() => initiateDeleteThought(t.id)} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}> <X size={14} color="white" /> </div> {t.image_url && <img src={t.image_url} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />} {t.video_url && <video src={t.video_url} controls style={{ width: '100%', height: '180px', background: 'black' }} />} <div style={{ padding: '15px' }}> <p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1e293b' }}>"{t.text}"</p> {t.is_private && <div style={{ marginTop: '5px', fontSize: '10px', color: '#ef4444', fontWeight: 'bold' }}><Lock size={10} /> PRIVATE</div>} <button onClick={() => toggleArchive(t.id, t.archived)} style={{ width: '100%', padding: '10px', marginTop: '12px', background: t.archived ? '#f0fdf4' : '#f1f5f9', color: t.archived ? '#16a34a' : '#64748b', border: t.archived ? '1px solid #bbf7d0' : '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer' }}> <Archive size={14} /> {t.archived ? 'Restore' : 'Archive'} </button> </div> </div> ))} {getDisplayedThoughts().filter(t => !t.is_quote).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>{showArchives ? 'The vault is empty.' : 'No media fuel yet.'}</p>} </div> <div style={{ marginTop: '20px' }}> <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#d97706', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}><Trophy size={12} /> The Receipts (Crushed)</h3> <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}> {crushedHistory.filter(m => viewingGoal === 'all' ? true : m.goal_id === viewingGoal.id && m.user_id === session.user.id).map(m => ( <div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' }}> <div style={{ marginTop: '2px' }}><Flame size={14} color="#d97706" fill="#d97706" /></div> <div> <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 'bold', color: '#92400e' }}>{m.task}</p> {m.victory_note && <p style={{ margin: 0, fontSize: '13px', color: '#b45309', fontStyle: 'italic' }}>"{m.victory_note}"</p>} </div> </div> ))} {crushedHistory.filter(m => viewingGoal === 'all' ? true : m.goal_id === viewingGoal.id && m.user_id === session.user.id).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No wins recorded yet. Crush a goal tomorrow.</p>} </div> </div> </div> )}
-           {activeTab === 'ally' && ( <div style={{ animation: 'fadeIn 0.3s' }}> {!viewingGoal ? ( <> <div style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px' }}> <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#0f172a', fontWeight: '800', fontSize: '18px' }}> <Users size={22} color="#60a5fa" /> Partner's Frontline </div> {partnerMissions.length === 0 && <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: '16px' }}><p style={{ margin: 0, fontSize: '14px' }}>Partner has no active missions.</p></div>} <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}> {partnerMissions.map(m => ( <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '12px', background: m.completed ? '#f0fdf4' : '#f8fafc', borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: '1px solid #e2e8f0', borderLeftWidth: '4px', opacity: m.completed && !m.crushed ? 0.7 : 1 }}> <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}> <div style={{ marginRight: '8px' }}>{partnerProfile?.avatar_url ? <img src={partnerProfile.avatar_url} style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} /> : <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#e2e8f0' }}></div>}</div> <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}><span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)}</span><span style={{ color: m.completed ? '#16a34a' : '#334155', fontWeight: '600', fontSize: '16px', textDecoration: m.completed && !m.crushed ? 'line-through' : 'none' }}>{m.task}</span></div> <button onClick={() => openCheerModal(m.id)} style={{ background: m.cheer_note ? '#f0fdf4' : 'white', border: '1px solid #cbd5e1', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><MessageCircle size={16} color={m.cheer_note ? '#16a34a' : '#94a3b8'} /></button> </div> {m.crushed && m.victory_note && ( <div style={{ marginTop: '5px', fontSize: '13px', color: '#c2410c', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px', background: '#fffbeb', padding: '6px', borderRadius: '8px' }}> <Trophy size={12} color="#f59e0b" /> "{m.victory_note}" </div> )} {m.cheer_note && ( <div style={{ marginTop: '5px', fontSize: '12px', color: '#16a34a', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}> <Heart size={12} fill="currentColor" /> You: "{m.cheer_note}" </div> )} </div> ))} </div> </div> <div style={{ marginBottom: '20px' }}><h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#d97706', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}><Trophy size={12} /> Recent Victories</h3><div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>{crushedHistory.filter(m => m.user_id !== session.user.id).slice(0, 5).map(m => (<div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' }}><div style={{ marginTop: '2px' }}><Flame size={14} color="#d97706" fill="#d97706" /></div><div><p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 'bold', color: '#92400e' }}>{m.task}</p>{m.victory_note && <p style={{ margin: 0, fontSize: '13px', color: '#b45309', fontStyle: 'italic' }}>"{m.victory_note}"</p>}</div></div>))}{crushedHistory.filter(m => m.user_id !== session.user.id).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No partner victories yet.</p>}</div></div> <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}><div onClick={() => setViewingGoal('all')} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}><div style={{ background: '#f1f5f9', padding: '15px', borderRadius: '50%' }}><Archive size={24} color="#64748b" /></div><span style={{ fontWeight: 'bold', color: '#334155' }}>All Partner Visions</span></div>{partnerGoals.map(g => (<div key={g.id} onClick={() => setViewingGoal(g)} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', borderTop: `4px solid ${g.color}`, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}><div style={{ background: `${g.color}20`, padding: '15px', borderRadius: '50%' }}><Target size={24} color={g.color} /></div><span style={{ fontWeight: 'bold', color: '#334155', textAlign: 'center' }}>{g.title}</span><span style={{ fontSize: '10px', color: '#94a3b8' }}>{partnerThoughts.filter(t => t.goal_id === g.id).length} Items</span></div>))}</div> </> ) : ( <> <button onClick={() => setViewingGoal(null)} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', color: '#64748b', fontSize: '14px', marginBottom: '15px', cursor: 'pointer' }}><ArrowLeft size={16} /> Back to Partner Folders</button> <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: '0 0 20px 0' }}>{viewingGoal === 'all' ? 'All Partner Visions' : viewingGoal.title}</h2> <div style={{ display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '20px', scrollbarWidth: 'none' }}>{getPartnerDisplayedThoughts().filter(t => !t.is_quote).map(t => (<div key={t.id} style={{ position: 'relative', minWidth: '260px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>{t.image_url && <img src={t.image_url} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />}{t.video_url && <video src={t.video_url} controls style={{ width: '100%', height: '180px', background: 'black' }} />}<div style={{ padding: '15px' }}><p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1e293b' }}>"{t.text}"</p></div></div>))}{getPartnerDisplayedThoughts().filter(t => !t.is_quote).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>Partner has no media here.</p>}</div> <div style={{ marginTop: '20px' }}><h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#d97706', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}><Trophy size={12} /> Partner's Wins</h3><div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>{crushedHistory.filter(m => viewingGoal === 'all' ? true : m.goal_id === viewingGoal.id && m.user_id !== session.user.id).map(m => (<div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' }}><div style={{ marginTop: '2px' }}><Flame size={14} color="#d97706" fill="#d97706" /></div><div><p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 'bold', color: '#92400e' }}>{m.task}</p>{m.victory_note && <p style={{ margin: 0, fontSize: '13px', color: '#b45309', fontStyle: 'italic' }}>"{m.victory_note}"</p>}</div></div>))}{crushedHistory.filter(m => viewingGoal === 'all' ? true : m.goal_id === viewingGoal.id && m.user_id !== session.user.id).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No partner wins yet.</p>}</div></div> </> )} </div> )}
+           {activeTab === 'ally' && (
+             <div style={{ animation: 'fadeIn 0.3s' }}>
+               {/* STATE 1: No Partner - Show Invite Form */}
+               {!currentProfile?.partner_id && (
+                 <div style={{ background: 'white', borderRadius: '20px', padding: '30px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+                   <Users size={48} color="#60a5fa" style={{ marginBottom: '20px' }} />
+                   <h3 style={{ margin: '0 0 10px 0', color: '#1e293b', fontSize: '20px', fontWeight: '800' }}>ALLY PROTOCOL</h3>
+                   <p style={{ margin: '0 0 24px 0', color: '#64748b', fontSize: '14px', lineHeight: '1.5' }}>
+                     "Iron sharpens iron. Link with one partner to see their visions and missions."
+                   </p>
+                   <input
+                     type="email"
+                     placeholder="Partner's Email"
+                     value={partnerEmail}
+                     onChange={(e) => setPartnerEmail(e.target.value)}
+                     style={{ width: '100%', padding: '14px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#1e293b', marginBottom: '16px', outline: 'none', fontSize: '16px', textAlign: 'center' }}
+                   />
+                   <button
+                     onClick={sendInvite}
+                     style={{ width: '100%', padding: '16px', borderRadius: '16px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: '700', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                   >
+                     <LinkIcon size={16} /> SEND INVITE
+                   </button>
+                 </div>
+               )}
+
+               {/* STATE 2: Pending - Show Pending Status */}
+               {currentProfile?.partner_id && currentProfile?.status === 'pending' && (
+                 <div style={{ background: 'white', borderRadius: '20px', padding: '30px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+                   <Users size={48} color="#fbbf24" style={{ marginBottom: '20px' }} />
+                   {currentProfile?.initiator_id === session.user.id ? (
+                     <>
+                       <h3 style={{ margin: '0 0 10px 0', color: '#1e293b', fontSize: '20px', fontWeight: '800' }}>INVITE SENT</h3>
+                       <p style={{ margin: '0 0 8px 0', color: '#64748b', fontSize: '14px' }}>Waiting for response from:</p>
+                       <p style={{ margin: '0 0 24px 0', color: '#1e293b', fontSize: '16px', fontWeight: '600' }}>{currentProfile.partner_email}</p>
+                       <button
+                         onClick={declineInvite}
+                         style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #ef4444', background: 'transparent', color: '#ef4444', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}
+                       >
+                         CANCEL INVITE
+                       </button>
+                     </>
+                   ) : (
+                     <>
+                       <h3 style={{ margin: '0 0 10px 0', color: '#1e293b', fontSize: '20px', fontWeight: '800' }}>INCOMING REQUEST</h3>
+                       <p style={{ margin: '0 0 8px 0', color: '#64748b', fontSize: '14px' }}>Alliance request from:</p>
+                       <p style={{ margin: '0 0 24px 0', color: '#1e293b', fontSize: '16px', fontWeight: '600' }}>{currentProfile.partner_email}</p>
+                       <div style={{ display: 'flex', gap: '12px' }}>
+                         <button
+                           onClick={acceptInvite}
+                           style={{ flex: 1, padding: '16px', borderRadius: '12px', border: 'none', background: '#10b981', color: 'white', fontWeight: '700', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                         >
+                           <Check size={18} /> ACCEPT
+                         </button>
+                         <button
+                           onClick={declineInvite}
+                           style={{ flex: 1, padding: '16px', borderRadius: '12px', border: 'none', background: '#ef4444', color: 'white', fontWeight: '700', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                         >
+                           <XCircle size={18} /> DECLINE
+                         </button>
+                       </div>
+                     </>
+                   )}
+                 </div>
+               )}
+
+               {/* STATE 3: Active Partnership - Show Partner's Protocol */}
+               {currentProfile?.partner_id && currentProfile?.status === 'active' && (
+                 <>
+                   {!viewingGoal ? (
+                     <>
+                       {/* Partner Info Header */}
+                       <div style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', borderRadius: '20px', padding: '20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                         {partnerProfile?.avatar_url ? (
+                           <img src={partnerProfile.avatar_url} style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover', border: '3px solid white' }} />
+                         ) : (
+                           <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={24} color="white" /></div>
+                         )}
+                         <div style={{ flex: 1 }}>
+                           <p style={{ margin: 0, color: 'rgba(255,255,255,0.8)', fontSize: '11px', fontWeight: '600', letterSpacing: '1px' }}>LINKED PARTNER</p>
+                           <p style={{ margin: '4px 0 0 0', color: 'white', fontSize: '16px', fontWeight: '700' }}>{currentProfile.partner_email}</p>
+                         </div>
+                         <div style={{ background: 'rgba(255,255,255,0.2)', padding: '6px 12px', borderRadius: '20px' }}>
+                           <span style={{ color: 'white', fontSize: '11px', fontWeight: '600' }}>ACTIVE</span>
+                         </div>
+                       </div>
+
+                       {/* Partner's Frontline (Today's Missions) */}
+                       <div style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px', color: '#0f172a', fontWeight: '800', fontSize: '16px' }}>
+                           <Target size={20} color="#60a5fa" /> Partner's Frontline
+                         </div>
+                         {partnerMissions.length === 0 && (
+                           <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: '16px' }}>
+                             <p style={{ margin: 0, fontSize: '14px' }}>No active missions today.</p>
+                           </div>
+                         )}
+                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                           {partnerMissions.map(m => (
+                             <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', borderRadius: '12px', background: m.completed ? '#f0fdf4' : '#f8fafc', borderLeft: `4px solid ${getGoalColor(m.goal_id)}`, border: '1px solid #e2e8f0', borderLeftWidth: '4px', opacity: m.completed && !m.crushed ? 0.7 : 1 }}>
+                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                   <span style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', color: getGoalColor(m.goal_id), letterSpacing: '0.5px' }}>{getGoalTitle(m.goal_id)}</span>
+                                   <span style={{ color: m.completed ? '#16a34a' : '#334155', fontWeight: '600', fontSize: '16px', textDecoration: m.completed && !m.crushed ? 'line-through' : 'none' }}>{m.task}</span>
+                                 </div>
+                                 <button onClick={() => openCheerModal(m.id)} style={{ background: m.cheer_note ? '#f0fdf4' : 'white', border: '1px solid #cbd5e1', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                   <MessageCircle size={16} color={m.cheer_note ? '#16a34a' : '#94a3b8'} />
+                                 </button>
+                               </div>
+                               {m.crushed && m.victory_note && (
+                                 <div style={{ marginTop: '5px', fontSize: '13px', color: '#c2410c', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px', background: '#fffbeb', padding: '6px', borderRadius: '8px' }}>
+                                   <Trophy size={12} color="#f59e0b" /> "{m.victory_note}"
+                                 </div>
+                               )}
+                               {m.cheer_note && (
+                                 <div style={{ marginTop: '5px', fontSize: '12px', color: '#16a34a', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                   <Heart size={12} fill="currentColor" /> You: "{m.cheer_note}"
+                                 </div>
+                               )}
+                             </div>
+                           ))}
+                         </div>
+                       </div>
+
+                       {/* Recent Partner Victories */}
+                       <div style={{ marginBottom: '20px' }}>
+                         <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#d97706', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                           <Trophy size={12} /> Recent Victories
+                         </h3>
+                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                           {crushedHistory.filter(m => m.user_id !== session.user.id).slice(0, 5).map(m => (
+                             <div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' }}>
+                               <div style={{ marginTop: '2px' }}><Flame size={14} color="#d97706" fill="#d97706" /></div>
+                               <div>
+                                 <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 'bold', color: '#92400e' }}>{m.task}</p>
+                                 {m.victory_note && <p style={{ margin: 0, fontSize: '13px', color: '#b45309', fontStyle: 'italic' }}>"{m.victory_note}"</p>}
+                               </div>
+                             </div>
+                           ))}
+                           {crushedHistory.filter(m => m.user_id !== session.user.id).length === 0 && (
+                             <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No partner victories yet.</p>
+                           )}
+                         </div>
+                       </div>
+
+                       {/* Partner's Vision Folders */}
+                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                         <div onClick={() => setViewingGoal('all')} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                           <div style={{ background: '#f1f5f9', padding: '15px', borderRadius: '50%' }}><Archive size={24} color="#64748b" /></div>
+                           <span style={{ fontWeight: 'bold', color: '#334155' }}>All Partner Visions</span>
+                         </div>
+                         {partnerGoals.map(g => (
+                           <div key={g.id} onClick={() => setViewingGoal(g)} style={{ background: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #e2e8f0', borderTop: `4px solid ${g.color}`, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                             <div style={{ background: `${g.color}20`, padding: '15px', borderRadius: '50%' }}><Target size={24} color={g.color} /></div>
+                             <span style={{ fontWeight: 'bold', color: '#334155', textAlign: 'center' }}>{g.title}</span>
+                             <span style={{ fontSize: '10px', color: '#94a3b8' }}>{partnerThoughts.filter(t => t.goal_id === g.id).length} Items</span>
+                           </div>
+                         ))}
+                       </div>
+
+                       {/* Sever Connection Button */}
+                       <button
+                         onClick={() => setPartnerModal(true)}
+                         style={{ width: '100%', marginTop: '20px', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white', color: '#64748b', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                       >
+                         <Settings size={14} /> Manage Alliance
+                       </button>
+                     </>
+                   ) : (
+                     <>
+                       <button onClick={() => setViewingGoal(null)} style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', color: '#64748b', fontSize: '14px', marginBottom: '15px', cursor: 'pointer' }}>
+                         <ArrowLeft size={16} /> Back to Partner Folders
+                       </button>
+                       <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: '0 0 20px 0' }}>{viewingGoal === 'all' ? 'All Partner Visions' : viewingGoal.title}</h2>
+                       <div style={{ display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '20px', scrollbarWidth: 'none' }}>
+                         {getPartnerDisplayedThoughts().filter(t => !t.is_quote).map(t => (
+                           <div key={t.id} style={{ position: 'relative', minWidth: '260px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                             {t.image_url && <img src={t.image_url} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />}
+                             {t.video_url && <video src={t.video_url} controls style={{ width: '100%', height: '180px', background: 'black' }} />}
+                             <div style={{ padding: '15px' }}><p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1e293b' }}>"{t.text}"</p></div>
+                           </div>
+                         ))}
+                         {getPartnerDisplayedThoughts().filter(t => !t.is_quote).length === 0 && <p style={{ color: '#cbd5e1', fontSize: '14px' }}>Partner has no media here.</p>}
+                       </div>
+                       <div style={{ marginTop: '20px' }}>
+                         <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#d97706', letterSpacing: '1px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                           <Trophy size={12} /> Partner's Wins
+                         </h3>
+                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                           {crushedHistory.filter(m => viewingGoal === 'all' ? m.user_id !== session.user.id : m.goal_id === viewingGoal.id && m.user_id !== session.user.id).map(m => (
+                             <div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' }}>
+                               <div style={{ marginTop: '2px' }}><Flame size={14} color="#d97706" fill="#d97706" /></div>
+                               <div>
+                                 <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 'bold', color: '#92400e' }}>{m.task}</p>
+                                 {m.victory_note && <p style={{ margin: 0, fontSize: '13px', color: '#b45309', fontStyle: 'italic' }}>"{m.victory_note}"</p>}
+                               </div>
+                             </div>
+                           ))}
+                           {crushedHistory.filter(m => viewingGoal === 'all' ? m.user_id !== session.user.id : m.goal_id === viewingGoal.id && m.user_id !== session.user.id).length === 0 && (
+                             <p style={{ color: '#cbd5e1', fontSize: '14px' }}>No partner wins yet.</p>
+                           )}
+                         </div>
+                       </div>
+                     </>
+                   )}
+                 </>
+               )}
+             </div>
+           )}
          </div>
        )}
       </div>
