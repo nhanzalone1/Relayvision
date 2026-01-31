@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './supabaseClient';
-import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2, ShieldCheck, AlertCircle, Edit3, Fingerprint, GripVertical, History, Users, Link as LinkIcon, Check, XCircle, MessageCircle, Heart, Send, Unlock, Save, Calendar, Upload, Image as ImageIcon, Settings, ChevronRight, Menu, HelpCircle, BarChart3, Terminal, ClipboardList, LayoutGrid, FileText, Clock, Rocket, Bell, BellOff } from 'lucide-react';
+import { Moon, Sun, Archive, Target, Flame, LogOut, Lock, Mic, Video, Camera, X, Square, ListTodo, Quote as QuoteIcon, CheckSquare, Plus, Eye, RotateCcw, Trophy, ArrowLeft, Eraser, RefreshCcw, Trash2, ShieldCheck, AlertCircle, Edit3, Fingerprint, GripVertical, History, Users, Link as LinkIcon, Check, XCircle, MessageCircle, Heart, Send, Unlock, Save, Calendar, Upload, Image as ImageIcon, Settings, ChevronRight, Menu, HelpCircle, BarChart3, Terminal, ClipboardList, LayoutGrid, FileText, Clock, Rocket } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Reorder, useDragControls } from "framer-motion";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -108,9 +108,6 @@ export default function App() {
   );
 }
 
-// Module-level flag to prevent double OneSignal initialization (React Strict Mode)
-let oneSignalHasInitialized = false;
-
 function VisionBoard({ session, onOpenSystemGuide }) {
   const [mode, setMode] = useState(() => localStorage.getItem('visionMode') || 'night');
   const [activeTab, setActiveTab] = useState('mission'); 
@@ -144,11 +141,6 @@ function VisionBoard({ session, onOpenSystemGuide }) {
   const [modalTab, setModalTab] = useState('mission');
   const [showManifestReview, setShowManifestReview] = useState(false); // The Checkout Screen
 
-  // --- ONESIGNAL NOTIFICATIONS ---
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [oneSignalInitialized, setOneSignalInitialized] = useState(false);
-  const [initError, setInitError] = useState('');
-
   // --- AUTO-TRIGGER ONBOARDING (Mode-Specific) ---
   // Fires when user enters a mode for the first time
   useEffect(() => {
@@ -166,157 +158,6 @@ function VisionBoard({ session, onOpenSystemGuide }) {
       }
     }
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // --- HELPER: Save OneSignal ID to Supabase ---
-  const saveOneSignalId = async (playerId) => {
-    if (!playerId || !session?.user?.id) {
-      console.log('[ONESIGNAL] Cannot save - missing playerId or session:', { playerId, userId: session?.user?.id });
-      return;
-    }
-    console.log('[ONESIGNAL] Saving OneSignal ID:', playerId);
-    const { error } = await supabase.from('profiles').update({ onesignal_id: playerId }).eq('id', session.user.id);
-    if (error) {
-      console.error('[ONESIGNAL] Failed to save ID:', error);
-    } else {
-      console.log('[ONESIGNAL] ID saved successfully!');
-    }
-  };
-
-  // --- ONESIGNAL INITIALIZATION (MANUAL INJECTION - CACHE BUSTER) ---
-  useEffect(() => {
-    // Prevent double init in React Strict Mode
-    if (oneSignalHasInitialized || oneSignalInitialized) {
-      console.log('[ONESIGNAL] Already initialized, skipping');
-      return;
-    }
-
-    // Check if script already loaded
-    if (window.OneSignal) {
-      console.log('[ONESIGNAL] window.OneSignal already exists');
-      return;
-    }
-
-    // Set flag immediately
-    oneSignalHasInitialized = true;
-    console.log('[ONESIGNAL] Starting manual script injection...');
-
-    // Create script with cache-busting timestamp
-    const script = document.createElement('script');
-    script.src = `https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js?v=${Date.now()}`;
-    script.async = true;
-
-    script.onerror = () => {
-      console.error('[ONESIGNAL] Script failed to load');
-      setInitError('Script failed to load from CDN');
-      oneSignalHasInitialized = false;
-    };
-
-    script.onload = () => {
-      console.log('[ONESIGNAL] Script loaded, initializing via OneSignalDeferred...');
-
-      // OneSignal v16 uses a deferred pattern
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      window.OneSignalDeferred.push(async (OneSignal) => {
-        try {
-          console.log('[ONESIGNAL] Running deferred init...');
-
-          await OneSignal.init({
-            appId: 'e1afb266-c90b-4cbd-9b8b-9bc49bc04783',
-            safari_web_id: 'web.onesignal.auto.646a746a-7347-4952-9576-96357416353d',
-            serviceWorkerParam: { scope: '/' },
-            serviceWorkerPath: 'OneSignalSDKWorker.js',
-            allowLocalhostAsSecureOrigin: true,
-            notifyButton: { enable: false }
-          });
-
-          setOneSignalInitialized(true);
-          console.log('[ONESIGNAL] Initialized successfully!');
-
-          // Check current permission status
-          const permission = await OneSignal.Notifications.permission;
-          setNotificationsEnabled(permission);
-          console.log('[ONESIGNAL] Permission:', permission);
-
-          // Check if already subscribed
-          const isSubscribed = OneSignal.User.PushSubscription.optedIn;
-          console.log('[ONESIGNAL] Opted In:', isSubscribed);
-
-          if (isSubscribed) {
-            const existingId = OneSignal.User.PushSubscription.id;
-            console.log('[ONESIGNAL] Existing ID:', existingId);
-            if (existingId) {
-              await saveOneSignalId(existingId);
-            }
-          }
-
-          // Listen for subscription changes
-          OneSignal.User.PushSubscription.addEventListener('change', async (event) => {
-            console.log('[ONESIGNAL] Subscription changed:', event);
-            const newId = event.current?.id;
-            const optedIn = event.current?.optedIn;
-
-            if (newId && optedIn) {
-              await saveOneSignalId(newId);
-            }
-          });
-
-          // Listen for permission changes
-          OneSignal.Notifications.addEventListener('permissionChange', (granted) => {
-            console.log('[ONESIGNAL] Permission changed:', granted);
-            setNotificationsEnabled(granted);
-          });
-
-        } catch (error) {
-          console.error('[ONESIGNAL] Init error:', error);
-          try {
-            setInitError(JSON.stringify(error, Object.getOwnPropertyNames(error)));
-          } catch {
-            setInitError(error?.message || String(error));
-          }
-          oneSignalHasInitialized = false;
-        }
-      });
-    };
-
-    // Append to head to start loading
-    document.head.appendChild(script);
-    console.log('[ONESIGNAL] Script tag appended to head');
-
-  }, [session]);
-
-  // --- FUNCTION TO REQUEST NOTIFICATION PERMISSION ---
-  const requestNotificationPermission = async () => {
-    console.log('[ONESIGNAL] Requesting permission...');
-    console.log('[ONESIGNAL] Initialized:', oneSignalInitialized);
-
-    try {
-      if (!oneSignalInitialized) {
-        console.log('[ONESIGNAL] Not initialized yet, trying native prompt...');
-        // Fallback to native browser notification
-        const permission = await Notification.requestPermission();
-        console.log('[ONESIGNAL] Native permission result:', permission);
-        if (permission === 'granted') {
-          setNotificationsEnabled(true);
-        }
-        return;
-      }
-
-      console.log('[ONESIGNAL] Calling OneSignal.Notifications.requestPermission()...');
-      await OneSignal.Notifications.requestPermission();
-      console.log('[ONESIGNAL] Permission request completed');
-    } catch (error) {
-      console.error('[ONESIGNAL] Permission request error:', error);
-      // Fallback to native
-      try {
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-          setNotificationsEnabled(true);
-        }
-      } catch (e) {
-        console.error('[ONESIGNAL] Native fallback also failed:', e);
-      }
-    }
-  };
 
   // --- SCHEDULE STATES ---
   const [showScheduleSettings, setShowScheduleSettings] = useState(false);
@@ -702,52 +543,6 @@ function VisionBoard({ session, onOpenSystemGuide }) {
       return days;
   };
 
-  // --- SEND PARTNER NOTIFICATION (OneSignal REST API) ---
-  const sendPartnerNotification = async () => {
-    try {
-      // Must have an active partner
-      if (!currentProfile?.partner_id || currentProfile?.status !== 'active') {
-        console.log('[NOTIFY] No active partner, skipping notification');
-        return;
-      }
-
-      // Fetch partner's profile to get their OneSignal ID
-      const { data: partnerData, error } = await supabase
-        .from('profiles')
-        .select('onesignal_id')
-        .eq('id', currentProfile.partner_id)
-        .single();
-
-      if (error || !partnerData?.onesignal_id) {
-        console.log('[NOTIFY] Partner has no OneSignal ID, skipping');
-        return;
-      }
-
-      // Get user's display name (email or name)
-      const userName = currentProfile?.display_name || currentProfile?.email || session?.user?.email || 'Your partner';
-
-      // Send notification via OneSignal REST API
-      const response = await fetch('https://onesignal.com/api/v1/notifications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${import.meta.env.VITE_ONESIGNAL_API_KEY}`
-        },
-        body: JSON.stringify({
-          app_id: 'e1afb266-c90b-4cbd-9b8b-9bc49bc04783',
-          include_player_ids: [partnerData.onesignal_id],
-          headings: { en: 'Relay Vision' },
-          contents: { en: `${userName} just crushed their morning protocol.` }
-        })
-      });
-
-      const result = await response.json();
-      console.log('[NOTIFY] Notification sent:', result);
-    } catch (err) {
-      console.error('[NOTIFY] Error sending notification:', err);
-    }
-  };
-
   const sendInvite = async () => { if(!partnerEmail) return; const { error } = await supabase.rpc('send_ally_invite', { target_email: partnerEmail }); if (error) { showNotification(error.message, "error"); } else { showNotification("Invite Sent.", "success"); fetchProfile(); } };
   const acceptInvite = async () => { const { error } = await supabase.rpc('confirm_alliance'); if (!error) { showNotification("Alliance Established.", "success"); confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 }, colors: ['#60a5fa', '#ffffff'] }); fetchProfile(); fetchAllData(); } };
   const declineInvite = async () => { const { error } = await supabase.rpc('sever_connection'); if (!error) { showNotification("Connection Severed.", "neutral"); fetchProfile(); } };
@@ -915,11 +710,7 @@ function VisionBoard({ session, onOpenSystemGuide }) {
       setMyMissions(nextMissions);
       // Update historyData for calendar colors
       setHistoryData(historyData.map(m => m.id === mission.id ? { ...m, ...updates } : m));
-      if(newCrushed) {
-        setCrushedHistory([ { ...mission, ...updates }, ...crushedHistory ]);
-        // Send push notification to partner
-        sendPartnerNotification();
-      }
+      if(newCrushed) setCrushedHistory([ { ...mission, ...updates }, ...crushedHistory ]);
       else setCrushedHistory(crushedHistory.filter(m => m.id !== mission.id));
     }
   };
@@ -1103,81 +894,8 @@ function VisionBoard({ session, onOpenSystemGuide }) {
     );
   };
 
-  // --- DEBUG: Force save OneSignal ID ---
-  const debugForceSaveId = async () => {
-    try {
-      const id = window.OneSignal?.User?.PushSubscription?.id;
-      if (!id) {
-        alert('Error: No OneSignal ID available. Script loaded: ' + (window.OneSignal ? 'YES' : 'NO'));
-        return;
-      }
-      const { error } = await supabase.from('profiles').update({ onesignal_id: id }).eq('id', session.user.id);
-      if (error) {
-        alert('Error: ' + error.message);
-      } else {
-        alert('Saved! ID: ' + id);
-      }
-    } catch (e) {
-      alert('Exception: ' + e.message);
-    }
-  };
-
   return (
     <>
-      {/* --- DEBUG OVERLAY (TEMPORARY) --- */}
-      <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'rgba(0,0,0,0.95)',
-        color: '#0f0',
-        padding: '10px',
-        fontSize: '11px',
-        fontFamily: 'monospace',
-        zIndex: 99999,
-        borderTop: '2px solid #0f0'
-      }}>
-        <div style={{ color: '#ff0', fontWeight: 'bold' }}>== BUILD v2.0 ==</div>
-        <div>Script Loaded: {typeof window !== 'undefined' && window.OneSignal ? 'YES' : 'NO'}</div>
-        <div>Deferred: {typeof window !== 'undefined' && window.OneSignalDeferred ? 'YES' : 'NO'}</div>
-        <div>Init: {oneSignalInitialized ? 'YES' : 'NO'}</div>
-        <div>Permission: {typeof Notification !== 'undefined' ? Notification.permission : 'N/A'}</div>
-        <div>ID: {window.OneSignal?.User?.PushSubscription?.id || 'NULL'}</div>
-        <div>User: {session?.user?.id?.slice(0,8) || 'NULL'}...</div>
-        {initError && <div style={{ color: '#ff0000', marginTop: '4px' }}>Error: {initError}</div>}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-          <button
-            onClick={debugForceSaveId}
-            style={{
-              padding: '8px 16px',
-              background: '#0f0',
-              color: 'black',
-              border: 'none',
-              borderRadius: '4px',
-              fontWeight: 'bold',
-              fontSize: '12px'
-            }}
-          >
-            FORCE SAVE ID
-          </button>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              padding: '8px 16px',
-              background: '#ff0',
-              color: 'black',
-              border: 'none',
-              borderRadius: '4px',
-              fontWeight: 'bold',
-              fontSize: '12px'
-            }}
-          >
-            RELOAD
-          </button>
-        </div>
-      </div>
-
       <div style={mode === 'night' ? nightStyle : morningStyle}>
         <style>{globalStyles}</style>
 
@@ -1313,41 +1031,6 @@ function VisionBoard({ session, onOpenSystemGuide }) {
               >
                 <HelpCircle size={14} /> How It Works
               </button>
-              {/* Notification Bell - only show if not yet enabled */}
-              {!notificationsEnabled && (
-                <button
-                  onClick={() => {
-                    console.log('[BELL] Clicked!');
-                    requestNotificationPermission();
-                  }}
-                  style={{
-                    border: 'none',
-                    background: mode === 'night' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
-                    borderRadius: '50%',
-                    padding: '10px',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    zIndex: 999,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                  title="Enable Notifications"
-                >
-                  <Bell size={20} color={mode === 'night' ? '#fbbf24' : '#f59e0b'} />
-                  <div style={{
-                    position: 'absolute',
-                    top: '4px',
-                    right: '4px',
-                    width: '8px',
-                    height: '8px',
-                    background: '#ef4444',
-                    borderRadius: '50%',
-                    border: mode === 'night' ? '2px solid #1f1f22' : '2px solid #fdfbf7',
-                    pointerEvents: 'none'
-                  }} />
-                </button>
-              )}
               <div style={{ position: 'relative' }}>
                 <button onClick={() => setPartnerModal(true)} style={{ border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '50%', padding: '8px', cursor: 'pointer', color: mode === 'night' ? '#64748b' : '#334155' }}>
                   <Users size={20} color={mode === 'night' ? 'white' : 'black'} />
