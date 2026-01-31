@@ -109,6 +109,9 @@ export default function App() {
   );
 }
 
+// Module-level flag to prevent double OneSignal initialization (React Strict Mode)
+let oneSignalHasInitialized = false;
+
 function VisionBoard({ session, onOpenSystemGuide }) {
   const [mode, setMode] = useState(() => localStorage.getItem('visionMode') || 'night');
   const [activeTab, setActiveTab] = useState('mission'); 
@@ -182,9 +185,17 @@ function VisionBoard({ session, onOpenSystemGuide }) {
   // --- ONESIGNAL INITIALIZATION ---
   useEffect(() => {
     const initOneSignal = async () => {
-      if (oneSignalInitialized) return;
+      // Use module-level flag to prevent double init in React Strict Mode
+      if (oneSignalHasInitialized || oneSignalInitialized) {
+        console.log('[ONESIGNAL] Already initialized, skipping');
+        return;
+      }
+
+      // Set flag immediately to prevent race conditions
+      oneSignalHasInitialized = true;
 
       try {
+        console.log('[ONESIGNAL] Starting initialization...');
         await OneSignal.init({
           appId: "e1afb266-c90b-4cbd-9b8b-9bc49bc04783",
           safari_web_id: "web.onesignal.auto.1afb9025-a2b0-4a54-8c00-23b218b2b39b",
@@ -232,6 +243,8 @@ function VisionBoard({ session, onOpenSystemGuide }) {
 
       } catch (error) {
         console.error('[ONESIGNAL] Init error:', error);
+        // Reset flag on error so it can retry
+        oneSignalHasInitialized = false;
       }
     };
 
