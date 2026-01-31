@@ -164,6 +164,21 @@ function VisionBoard({ session, onOpenSystemGuide }) {
     }
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // --- HELPER: Save OneSignal ID to Supabase ---
+  const saveOneSignalId = async (playerId) => {
+    if (!playerId || !session?.user?.id) {
+      console.log('[ONESIGNAL] Cannot save - missing playerId or session:', { playerId, userId: session?.user?.id });
+      return;
+    }
+    console.log('[ONESIGNAL] Saving OneSignal ID:', playerId);
+    const { error } = await supabase.from('profiles').update({ onesignal_id: playerId }).eq('id', session.user.id);
+    if (error) {
+      console.error('[ONESIGNAL] Failed to save ID:', error);
+    } else {
+      console.log('[ONESIGNAL] ID saved successfully!');
+    }
+  };
+
   // --- ONESIGNAL INITIALIZATION ---
   useEffect(() => {
     const initOneSignal = async () => {
@@ -178,33 +193,43 @@ function VisionBoard({ session, onOpenSystemGuide }) {
         });
 
         setOneSignalInitialized(true);
+        console.log('[ONESIGNAL] Initialized successfully');
 
         // Check current permission status
         const permission = await OneSignal.Notifications.permission;
         setNotificationsEnabled(permission);
+        console.log('[ONESIGNAL] Current permission:', permission);
+
+        // Check if user is already subscribed and has an ID
+        const isSubscribed = OneSignal.User.PushSubscription.optedIn;
+        console.log('[ONESIGNAL] Already subscribed:', isSubscribed);
+
+        if (isSubscribed) {
+          const existingId = OneSignal.User.PushSubscription.id;
+          console.log('[ONESIGNAL] Existing subscription ID:', existingId);
+          if (existingId) {
+            await saveOneSignalId(existingId);
+          }
+        }
+
+        // Listen for subscription changes (when user clicks Allow)
+        OneSignal.User.PushSubscription.addEventListener('change', async (event) => {
+          console.log('[ONESIGNAL] Subscription changed:', event);
+          const newId = event.current?.id;
+          const optedIn = event.current?.optedIn;
+          console.log('[ONESIGNAL] New ID:', newId, 'Opted In:', optedIn);
+
+          if (newId && optedIn) {
+            await saveOneSignalId(newId);
+          }
+        });
 
         // Listen for permission changes
         OneSignal.Notifications.addEventListener('permissionChange', (granted) => {
+          console.log('[ONESIGNAL] Permission changed:', granted);
           setNotificationsEnabled(granted);
         });
 
-        console.log('[ONESIGNAL] Initialized successfully');
-
-        // Save OneSignal Player ID to Supabase profile
-        const playerId = OneSignal.User.PushSubscription.id;
-        if (playerId && session?.user?.id) {
-          console.log('[ONESIGNAL] Saving Player ID to profile:', playerId);
-          await supabase.from('profiles').update({ onesignal_id: playerId }).eq('id', session.user.id);
-        }
-
-        // Listen for subscription changes (in case user subscribes later)
-        OneSignal.User.PushSubscription.addEventListener('change', async (event) => {
-          const newPlayerId = event.current.id;
-          if (newPlayerId && session?.user?.id) {
-            console.log('[ONESIGNAL] Subscription changed, updating Player ID:', newPlayerId);
-            await supabase.from('profiles').update({ onesignal_id: newPlayerId }).eq('id', session.user.id);
-          }
-        });
       } catch (error) {
         console.error('[ONESIGNAL] Init error:', error);
       }
